@@ -88,6 +88,7 @@ def main():
     ap.add_argument("--data", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--model", default="qwen3.5:2b")
+    ap.add_argument("--url", default="http://127.0.0.1:11434", help="Ollama URL, or an OpenAI-compatible vLLM base ending in /v1")
     ap.add_argument("--think", action="store_true")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--workers", type=int, default=1)
@@ -100,7 +101,7 @@ def main():
         for ln in ck.read_text(encoding="utf-8").splitlines():
             r = json.loads(ln)
             done[r["id"]] = r
-    llm = LLM(a.model)
+    llm = LLM(a.model, url=a.url)
     llm.think_plan = a.think
     todo = [r for r in test.itertuples() if r.ID not in done]
     if a.limit:

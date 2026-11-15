@@ -50,6 +50,32 @@ class LLM:
     def __init__(self, model: str = "qwen2.5:3b-instruct", url: str = "http://127.0.0.1:11434", seed: int = 1234, timeout: int = 120):
         self.model, self.url, self.seed, self.timeout = model, url.rstrip("/"), seed, timeout
         self._caps = None
+        # backend: 'ollama' (native /api/chat) or 'vllm' (OpenAI-compatible /v1/chat/completions); same interface and ledger
+        self.backend = "vllm" if self.url.endswith("/v1") else "ollama"
+
+    def _chat_vllm(self, messages, ledger, think, opts, max_tokens, json_mode, tag):
+        body = {"model": self.model, "messages": messages, "max_tokens": max_tokens, "seed": self.seed,
+                "temperature": opts.get("temperature", 0.6), "top_p": opts.get("top_p", 1.0),
+                "chat_template_kwargs": {"enable_thinking": bool(think)}}
+        if opts.get("top_k"):
+            body["top_k"] = opts["top_k"]
+        if opts.get("presence_penalty"):
+            body["presence_penalty"] = opts["presence_penalty"]
+        if isinstance(json_mode, dict):
+            body["response_format"] = {"type": "json_schema", "json_schema": {"name": "answer", "schema": json_mode}}
+        elif json_mode:
+            body["response_format"] = {"type": "json_object"}
+        t0 = time.time()
+        req = urllib.request.Request(self.url + "/chat/completions", data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=self.timeout) as r:
+            out = json.loads(r.read())
+        ch = out["choices"][0]
+        msg = ch.get("message", {})
+        u = out.get("usage", {})
+        rec = {"tag": tag, "think": think, "eval_tokens": int(u.get("completion_tokens", 0)), "prompt_tokens": int(u.get("prompt_tokens", 0)),
+               "seconds": time.time() - t0, "done_reason": ch.get("finish_reason")}
+        ledger.calls.append(rec)  # completion_tokens include any reasoning tokens -> budget stays honest
+        return {"text": msg.get("content", "") or "", "thinking": msg.get("reasoning_content", "") or "", **rec}
 
     def can_think(self) -> bool:
         if self._caps is None:
@@ -71,6 +97,8 @@ class LLM:
         if left <= 0:
             raise BudgetExceeded(f"{MAX_TOKENS} tokens used")
         opts = dict(PROFILES[profile or ("thinking" if think else "precise")])
+        if self.backend == "vllm":
+            return self._chat_vllm(messages, ledger, think, opts, min(max_tokens, left), json_mode, tag)
         opts.update(seed=self.seed, num_predict=min(max_tokens, left), num_ctx=16384)
         body = {"model": self.model, "messages": messages, "stream": False, "options": opts}
         if self.can_think():  # thinking-capable models get an explicit flag (they may think by default); others must not receive it

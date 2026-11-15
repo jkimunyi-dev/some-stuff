@@ -54,6 +54,7 @@ def main():
     ap.add_argument("--split", choices=["dev", "holdout", "all"], default="dev")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--model", default="qwen2.5:3b-instruct")
+    ap.add_argument("--url", default="http://127.0.0.1:11434", help="Ollama URL, or an OpenAI-compatible vLLM base ending in /v1")
     ap.add_argument("--think", action="store_true", help="let a thinking-capable model think during plan/bind calls")
     ap.add_argument("--workers", type=int, default=1, help="questions answered concurrently (match OLLAMA_NUM_PARALLEL)")
     ap.add_argument("--out", default="")
@@ -61,7 +62,7 @@ def main():
     its = items(Path(a.data), Path(a.sources), a.split)
     if a.limit:
         its = its[: a.limit]
-    llm = LLM(a.model)
+    llm = LLM(a.model, url=a.url)
     llm.think_plan = a.think
     rows = []
     def one(it):
