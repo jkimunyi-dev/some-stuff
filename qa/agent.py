@@ -389,8 +389,13 @@ def narrow(t: Table, question: str, gloss: dict, op: str):
     blocks = list(dict.fromkeys(e.split(" / ", 1)[0] for e in E if " / " in e))
     if blocks:
         named_b = [b for b in blocks if re.search(rf"(?<!\w){re.escape(b.lower())}(?!\w)", ql)]
+        # "<place> metropolitan area/region": the place is part of an aggregate block -> the aggregate is meant
+        area_of = [a for a, parts in t.aggregates.items() for b in named_b if b in parts and
+                   re.search(rf"(?<!\w){re.escape(b.lower())}(?:'s)?\s+(?:\w+[\s-]+){{0,1}}(metropolitan|region|regional|area|capital)", ql)]
+        if area_of:
+            named_b = list(dict.fromkeys(area_of))
         if named_b:
-            keep = set(named_b) | (set(t.aggregates) if AREA_WORDS.search(question) else set())
+            keep = set(named_b) | (set(t.aggregates) if AREA_WORDS.search(question) and not area_of else set())
             E = [e for e in E if e.split(" / ", 1)[0] in keep]
         totals = set(t.totals.values())
         comps = {e.split(" / ", 1)[1] for e in E if " / " in e and e not in totals}
@@ -647,6 +652,10 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                         own = t0.totals.get(blk)
                         if pr["part"] == pr["whole"] and own and pr["part"] != own:
                             pr["whole"] = own  # a component's share is of its own block total
+                        elif pr["part"] == pr["whole"] == own and getattr(t0, "_named_comps", None):
+                            cand = f"{blk} / {t0._named_comps[0]}"  # total chosen twice: the part is the named component
+                            if cand in t0.entities:
+                                pr["part"] = cand
                 if op in ("change", "percent_of") and o["period_from"][:4] > o["period_to"][:4]:
                     o["period_from"], o["period_to"] = o["period_to"], o["period_from"]  # from = earlier/base, to = later
                 if op == "change" and o["period_from"] == o["period_to"]:
