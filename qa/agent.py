@@ -22,6 +22,8 @@ from .cards import guide_text, is_guide
 from .llm import LLM, BudgetExceeded, Ledger
 from .score import numbers
 from .tables import Table, clean_name, sheet_text, workbook_tables
+from .transit_op import MODELS as TRANSIT_MODELS, TASKS as TRANSIT_TASKS, TransitError, feed_for, run_transit, stop_options, trip_options
+from .gtfs import LOCATION_TYPES
 from .spatial_op import TASKS as SPATIAL_TASKS, SpatialError, anchor_options, run_spatial, stated_crs
 from .query import AGGS, FILTER_OPS, QueryError, json_records, profile, run_query, sheet_records, value_hits
 from .textqa import TEXT_SUFFIXES, Index
@@ -45,6 +47,7 @@ OPS = {
     "table_query": "count / sum / average / min / max / distinct / duplicates over the RECORDS of a table, optionally filtered (e.g. value > 0, category = X) and grouped (e.g. per street, per type, top N)",
     "compare_keys": "compare identifier values between two files (values present in only one file, duplicates in each)",
     "area": "area of one polygon identified in the question, computed in a stated coordinate system",
+    "transit": "public-transport timetable (GTFS) logic: trips active on a date (calendar exceptions), modelled walking route times through station pathways (step-free / without lifts), nearest entrance to a platform, a trip's time at a stop as local date and UTC, wheelchair access of a stop and its parent",
     "spatial": "distances between mapped features: how many features lie within N metres of a named feature, the nearest feature, features outside a coordinate box, overlap of two crown circles, height (Z) span of a 3D feature, invalid geometries",
     "explain": "the question asks whether the data SUPPORTS something or what a symbol/flag means (e.g. whether '[z]' entries can be treated as zero); no calculation",
     "text_answer": "the answer is stated in words in a report, guide, readme or metadata document (e.g. publisher, licence, definitions, survey findings, caveats)",
@@ -57,6 +60,7 @@ EXAMPLES = """EXAMPLES (question -> operation):
 - "Average load per trip from the displayed tonne-km and trip totals?" -> ratio
 - "What were the start and end dates of record R17, and how many days apart?" -> record_lookup
 - "What is the area of polygon P-4 in hectares?" -> area
+- "How many trips run on 3 March after exceptions?" / "Fastest step-free route from entrance E to platform 2?" -> transit
 - "How many trees lie within 20 m of tree T-9, including it?" / "Which entrance is closest to platform 2?" -> spatial
 - "How many rows have no end_date?" -> count_blank
 - "How many trees have height 0, and which genus is most common on street S?" -> table_query
@@ -433,6 +437,18 @@ def explain_context(srcs: list[Source], all_srcs: list[Source]) -> str:
 AREA_WORDS = re.compile(r"\b(metropolitan|region|regional|area|capital|whole|combined|overall)\b", re.I)
 
 
+_MONTHS = {m: i for i, m in enumerate(["january", "february", "march", "april", "may", "june", "july", "august", "september",
+                                       "october", "november", "december"], 1)}
+
+
+def iso_dates(text: str) -> list[str]:
+    out = re.findall(r"\b(\d{4}-\d{2}-\d{2})\b", text)
+    for d, mo, y in re.findall(r"\b(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\b", text):
+        if mo.lower() in _MONTHS:
+            out.append(f"{int(y):04d}-{_MONTHS[mo.lower()]:02d}-{int(d):02d}")
+    return list(dict.fromkeys(out))
+
+
 def narrow(t: Table, question: str, gloss: dict, op: str):
     """Code-side narrowing of the options offered to the model, using facts detectable in the question and the table:
     years mentioned; blocks (places) named; total rows when no component is named; for flat tables, items sharing a word."""
@@ -563,7 +579,7 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             kinds = {s.kind for s in ss}
             need = {"value": {"table"}, "change": {"table"}, "percent_of": {"table"}, "share": {"table"}, "ratio": {"table"},
                     "record_lookup": {"csv", "geo"}, "count_blank": {"csv", "geo"}, "compare_keys": {"csv", "geo"}, "area": {"geo"}, "explain": None,
-                    "table_query": {"csv", "geo"}, "spatial": {"geo"},
+                    "table_query": {"csv", "geo"}, "spatial": {"geo"}, "transit": None,
                     "text_answer": None}[o["operation"]]
             if need and not kinds <= need:
                 raise Fail(f"operation {o['operation']} needs a source of kind {sorted(need)}, got {sorted(kinds)}")
@@ -614,6 +630,8 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                             fit_rejected.append(key)  # one push-back; the model may insist
                             raise Fail(f"{best.sid} ({best.table.id}) matches '{side.strip()[:80]}' better than {chosen.sid} "
                                        f"({chosen.table.id}). Use {best.sid} for that side unless it is really the wrong measure.")
+            if o["operation"] == "transit" and feed_for(files) is None:
+                raise Fail("transit needs a GTFS feed (stops.txt, trips.txt, ...) in the sources; choose another operation")
             if o["operation"] in ("record_lookup", "area") and not id_candidates(question, ss[0]):
                 raise Fail(f"no identifier from the question occurs in {clean_name(ss[0].file)}; choose the source that contains it")
             return o
@@ -747,6 +765,38 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                         facts.append(f"{_label(e, gloss)} in {p}: {v!r} (cell {a1})")
             else:
                 facts, keys = run_table_op(op, b, ss, ex, gloss)
+        elif op == "transit":
+            fd = feed_for(files)
+            stops = stop_options(fd, f"{question} {context}") or ["(none)"]
+            trips = trip_options(fd, f"{question} {context}")
+            dates = iso_dates(f"{question} {context}")
+            bs = _enum_schema({"reasoning": {"type": "string", "maxLength": 200},
+                               "task": {"type": "string", "enum": TRANSIT_TASKS},
+                               "date": {"type": "string", "maxLength": 10}, "flag": {"type": "string", "enum": ["", "bikes_prohibited", "bikes_allowed", "wheelchair_accessible"]},
+                               "stop_a": {"type": "string", "enum": [""] + stops}, "stop_b": {"type": "string", "enum": [""] + stops},
+                               "models": {"type": "array", "items": {"type": "string", "enum": TRANSIT_MODELS}, "maxItems": 3},
+                               "both_directions": {"type": "boolean"},
+                               "candidate_type": {"type": "string", "enum": [v for k, v in LOCATION_TYPES.items() if k]},
+                               "same_station": {"type": "boolean"},
+                               "trip": {"type": "string", "enum": [""] + trips}, "which": {"type": "string", "enum": ["first", "last"]}})
+            bm = [{"role": "system", "content": SYS},
+                  {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nStops matching the question (id | name | type): {'; '.join(stops)}\n"
+                                              f"Trips named in the question/Context: {', '.join(trips) or '(none)'}\nDates found (ISO): {', '.join(dates) or '(none)'}\n"
+                                              "Pick the task. active_trips: date (YYYY-MM-DD; a named day like Boxing Day must be converted) and optional flag. "
+                                              "route_time: stop_a (start) and stop_b (end), the models the question asks for, both_directions if it asks for the way back too. "
+                                              "nearest_stop: stop_a is the target, candidate_type, same_station. trip_time_at_stop: trip, stop_a (or empty with which=last "
+                                              "for the destination), date = service day. accessibility: stop_a. Reply as JSON."}]
+
+            def vt(o):
+                o.pop("reasoning", None)
+                try:
+                    run_transit(o, fd, context, Recorder())
+                except (TransitError, KeyError, ValueError, IndexError) as e:
+                    raise Fail(f"{type(e).__name__}: {e}")
+                return o
+            b = _ask_json(llm, led, bm, bs, "bind", vt, think=getattr(llm, "think_plan", False))
+            trace["bind"] = b
+            facts, keys = run_transit(b, fd, context, ex.rec)
         elif op == "spatial":
             geo = [x for x in pool if x.kind == "geo"]
             gid = {x.sid: x for x in geo}
