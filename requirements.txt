@@ -1,0 +1,17 @@
+pandas
+openpyxl
+odfpy
+geopandas
+pyogrio
+shapely
+pyproj
+rasterio
+pypdf
+pdfplumber
+laspy
+lxml
+beautifulsoup4
+networkx
+pillow
+pytest
+# optional (Colab / OCR / IFC): ifcopenshell pytesseract  (+ apt: tesseract-ocr poppler-utils)

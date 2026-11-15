@@ -149,6 +149,12 @@ def card_pdf(p: Path) -> str:
 
     r = PdfReader(str(p))
     t = (r.pages[0].extract_text() or "")[:200].replace("\n", " ")
+    if len(t.strip()) < 50:  # scanned: fall back to OCR
+        from qa.ocr import ocr_file
+
+        o = ocr_file(p, max_pages=2)
+        if o:
+            return f"pdf pages={len(r.pages)} scanned; OCR p1-2: {o[:600]!r}"
     return f"pdf pages={len(r.pages)} p1={t!r}"
 
 
@@ -189,7 +195,10 @@ def card_for_file(path: Path) -> str:
         if ext == ".zip":
             return "zip members: " + ", ".join(zipfile.ZipFile(path).namelist()[:10])
         if ext in (".jpg", ".png"):
-            return "image (needs OCR)"
+            from qa.ocr import ocr_file
+
+            o = ocr_file(path)
+            return f"image OCR: {o[:600]!r}" if o else "image (needs OCR)"
         return f"{ext} {path.stat().st_size:,} B"
     except Exception as e:  # noqa: BLE001
         return f"card failed: {type(e).__name__}: {str(e)[:100]}"
