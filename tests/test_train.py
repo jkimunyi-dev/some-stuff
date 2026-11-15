@@ -74,3 +74,28 @@ def test_devset_deterministic_and_two_way_agree(tmp_path):
     assert 0.2 < len(hold) / len(a) < 0.45
     committed = json.load(open(Path(__file__).parent.parent / "dev" / "dev_set.json", encoding="utf-8"))
     assert committed == a
+
+
+def test_raster_areas_match_polygon_geodesic_area():
+    """Cape Town: summed geodesic cell areas must equal the polygon's geodesic area (validates the cell-area method)."""
+    import geopandas as gpd
+    from pyproj import Geod
+    from qa.tools import raster_class_areas
+
+    m = gpd.read_file(f("municipalities.geojson"))
+    r = m[m.shapeName.str.contains("Cape")].iloc[0]
+    tot = sum(raster_class_areas(f("cape_town_2021.tif"), r.geometry).values())
+    poly = abs(Geod(ellps="WGS84").geometry_area_perimeter(r.geometry)[0]) / 1e6
+    assert abs(tot - poly) < 0.5
+
+
+def test_gtfs_active_services_two_ways():
+    from qa.tools import gtfs_active_services
+
+    cal, cd = read_table(f("calendar.txt")), read_table(f("calendar_dates.txt"))
+    date = "2026-11-04"  # Wednesday
+    got = gtfs_active_services(cal, cd, date)
+    base = {r.service_id for r in cal.itertuples() if r.start_date <= "20261104" <= r.end_date and r.wednesday == "1"}
+    adds = {r.service_id for r in cd.itertuples() if r.date == "20261104" and r.exception_type == "1"}
+    rem = {r.service_id for r in cd.itertuples() if r.date == "20261104" and r.exception_type == "2"}
+    assert got == (base | adds) - rem
