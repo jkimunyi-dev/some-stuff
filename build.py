@@ -68,6 +68,13 @@ def step_ocr() -> None:
         out[r.source_id] = {"file": r.original_file, "text": ocr_file(path, max_pages=20)}
     (RUNS / "ocr.json").write_text(json.dumps(out, indent=1, ensure_ascii=False), encoding="utf-8")
     print("[ocr]", {k: len(v["text"]) for k, v in out.items()})
+    # large scanned sheets (maps): tiled OCR with word boxes, cached per source
+    from qa.maps import cached_words
+
+    for r in todo[todo.ext.isin([".jpg", ".png"]) & (todo.bytes > 1_000_000)].itertuples():
+        path = next(SRC.glob(f"{r.source_id}__*"))
+        w = cached_words(path, RUNS / f"map_words_{r.source_id}.json")
+        print(f"[maps] {r.original_file}: {len(w)} words")
 
 
 def step3() -> None:
