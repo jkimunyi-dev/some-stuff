@@ -642,6 +642,21 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             if o["operation"] not in OPS:
                 raise Fail("unknown operation")
             ss = [by_id[x] for x in o["sources"]]
+            # repair operation/source-kind mismatches instead of failing
+            recs = [x for x in pool if x.kind in ("csv", "geo")]
+            if o["operation"] in ("value", "change", "percent_of", "share", "ratio") and ss and all(x.kind in ("csv", "geo") for x in ss):
+                trace["op_repair"] = f"{o['operation']} on a record table -> table_query"
+                o["operation"] = "table_query"
+            elif o["operation"] in ("table_query", "record_lookup", "count_blank") and not any(x.kind in ("csv", "geo") for x in ss) and recs:
+                best = rank_sources(recs, f"{question} {context}", 1)[0]
+                trace["op_repair"] = f"{o['operation']}: source {o['sources']} -> {best.sid}"
+                o["sources"] = [best.sid]
+                ss = [best]
+            elif o["operation"] in ("value", "change", "percent_of", "share", "ratio") and not any(x.kind == "table" for x in ss) and recs \
+                    and not any(x.kind == "table" for x in pool):
+                best = rank_sources(recs, f"{question} {context}", 1)[0]
+                trace["op_repair"] = f"{o['operation']} without workbook tables -> table_query on {best.sid}"
+                o["operation"], o["sources"], ss = "table_query", [best.sid], [best]
             kinds = {s.kind for s in ss}
             need = {"value": {"table"}, "change": {"table"}, "percent_of": {"table"}, "share": {"table"}, "ratio": {"table"},
                     "record_lookup": {"csv", "geo"}, "count_blank": {"csv", "geo"}, "compare_keys": {"csv", "geo"}, "area": {"geo"}, "explain": None,
