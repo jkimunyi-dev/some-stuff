@@ -7,7 +7,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 OUT = Path("/kaggle/working")
-MODELS = ["qwen2.5:3b-instruct-q8_0", "qwen2.5:3b-instruct"]  # first that pulls wins (Q8 = higher precision, same parameter count)
+MODELS = ["qwen3.5:2b", "qwen2.5:3b-instruct-q8_0"]  # compared on the same items; each must be <= 3B total parameters (checked below)
 RUNS = [  # (name, extra args): real end-to-end Qwen runs only
     ("qwen_dev", ["--split", "dev"]),
 ]
@@ -50,13 +50,21 @@ for _ in range(60):
         break
     except Exception:
         time.sleep(2)
-MODEL = next((m for m in MODELS if sh(f"ollama pull {m} > /tmp/pull.log 2>&1").returncode == 0), None)
-assert MODEL, "no model could be pulled"
-show = json.loads(urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:11434/api/show", data=json.dumps({"model": MODEL}).encode())).read())
-print("MODEL", show["details"], show["model_info"].get("general.parameter_count"))
-(OUT / "MODEL.json").write_text(json.dumps({"model": MODEL, "details": show["details"], "parameter_count": show["model_info"].get("general.parameter_count")}, indent=1))
-
-# --- runs
-for name, args in RUNS:
-    sh(f"cd {REPO} && python -u -m qa.run_dev --sources {SRC} --data {DATA} --model {MODEL} {' '.join(args)} --out /kaggle/working/{name}.json 2>&1")
+meta = {}
+for MODEL in MODELS:
+    if sh(f"ollama pull {MODEL} > /tmp/pull.log 2>&1").returncode != 0:
+        print("PULL FAILED", MODEL, open("/tmp/pull.log").read()[-300:])
+        continue
+    show = json.loads(urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:11434/api/show", data=json.dumps({"model": MODEL}).encode())).read())
+    pc = show["model_info"].get("general.parameter_count")
+    print("MODEL", MODEL, show["details"], pc, show.get("capabilities"))
+    meta[MODEL] = {"details": show["details"], "parameter_count": pc, "capabilities": show.get("capabilities")}
+    if not pc or pc > 3_200_000_000:
+        print("SKIP: over the 3B class", MODEL)
+        continue
+    tag = MODEL.replace(":", "_").replace(".", "")
+    for name, args in RUNS:
+        sh(f"cd {REPO} && python -u -m qa.run_dev --sources {SRC} --data {DATA} --model {MODEL} {' '.join(args)} --out /kaggle/working/{name}_{tag}.json 2>&1")
+    sh(f"ollama stop {MODEL}")
+(OUT / "MODEL.json").write_text(json.dumps(meta, indent=1))
 print("done in", round(time.time() - t0), "s")

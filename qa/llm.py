@@ -47,6 +47,17 @@ class Ledger:
 class LLM:
     def __init__(self, model: str = "qwen2.5:3b-instruct", url: str = "http://127.0.0.1:11434", seed: int = 1234, timeout: int = 900):
         self.model, self.url, self.seed, self.timeout = model, url.rstrip("/"), seed, timeout
+        self._caps = None
+
+    def can_think(self) -> bool:
+        if self._caps is None:
+            try:
+                req = urllib.request.Request(self.url + "/api/show", data=json.dumps({"model": self.model}).encode(), headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    self._caps = set(json.loads(r.read()).get("capabilities") or [])
+            except Exception:
+                self._caps = set()
+        return "thinking" in self._caps
 
     def chat(self, messages: list[dict], ledger: Ledger, think: bool = False, profile: str | None = None,
              max_tokens: int = 2000, json_mode: bool | dict = False, tag: str = "") -> dict:
@@ -58,8 +69,8 @@ class LLM:
         opts = dict(PROFILES[profile or ("thinking" if think else "precise")])
         opts.update(seed=self.seed, num_predict=min(max_tokens, left), num_ctx=16384)
         body = {"model": self.model, "messages": messages, "stream": False, "options": opts}
-        if think:
-            body["think"] = True
+        if self.can_think():  # thinking-capable models get an explicit flag (they may think by default); others must not receive it
+            body["think"] = bool(think)
         if json_mode:
             body["format"] = json_mode if isinstance(json_mode, dict) else "json"  # JSON schema -> grammar-constrained output; callers still validate
         t0 = time.time()
