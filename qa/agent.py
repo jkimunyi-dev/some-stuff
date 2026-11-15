@@ -637,6 +637,17 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             return o
         plan = _ask_json(llm, led, msg, sch, "plan", v1, think=getattr(llm, "think_plan", False))
         op, ss = plan["operation"], [by_id[x] for x in plan["sources"]]
+        if op in ("value", "change", "percent_of", "share", "explain") and ss and ss[0].kind == "table":
+            # the question names a table's measure verbatim (e.g. 'passenger journeys'): use such a table, preferring the one
+            # sharing most item names with the chosen table (code decision, the model's table is replaced)
+            norm = lambda x: " ".join(re.findall(r"[a-z0-9]+", x.lower()))
+            meas = lambda x: norm(re.sub(r"\(.*?\)", "", x.table.measure or ""))
+            qn = norm(question)
+            phrase = [x for x in pool if x.kind == "table" and len(meas(x).split()) >= 2 and meas(x) in qn]
+            if phrase and ss[0] not in phrase:
+                best = max(phrase, key=lambda x: (len(set(x.table.entities) & set(ss[0].table.entities)), -phrase.index(x)))
+                trace["table_switch"] = f"{ss[0].table.id} -> {best.table.id}"
+                ss = [best] + ss[1:]
         trace["plan"] = {"op": op, "sources": [s.desc[:90] for s in ss], "what_is_asked": plan.get("what_is_asked", "")}
         ex = Exec(context)
         gloss: dict = {}
