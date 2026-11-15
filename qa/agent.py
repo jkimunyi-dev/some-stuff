@@ -1,260 +1,477 @@
-"""Steps 5-6 (first cut): model plans -> code validates and runs tools -> model writes the answer from tool results.
+"""Question answering: the model chooses, code computes.
 
-Generic: no pack IDs, question IDs or answer constants. Conventions that Context fixes (displayed vs stored values, rounding)
-are parsed from the Context text by code, not left to the model. Every model call goes through qa.llm.LLM (budget ledger).
+  call 1  (plan)     model picks an operation and the source(s) from enumerated lists       [JSON schema enforced]
+  call 2  (gloss)    only if labels are non-English: model glosses them into English         [JSON schema enforced]
+  call 3  (bind)     model picks entities/periods/columns/keys from the chosen source's real labels
+  code               resolves labels -> cells/records, reads stored or displayed values per Context, computes
+  call 4  (write)    model writes the answer from the computed facts; code checks every key number survived,
+                     else falls back to a deterministic sentence built from the facts.
+Retries feed the validation error back to the model. Every call goes through qa.llm (15 calls / 12k tokens per question).
+Generic: no pack IDs, question IDs or answer constants.
 """
 from __future__ import annotations
 
-import ast
 import json
-import math
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from .cards import card_for_file, guide_text, is_guide
+import pandas as pd
+
+from .cards import guide_text, is_guide
 from .llm import LLM, BudgetExceeded, Ledger
-from .tools import Ods, Recorder, Xlsx, days_between, pct_change, round_half_up, share, split_a1, col_to_idx, read_table
+from .score import numbers
+from .tables import Table, clean_name, sheet_text, workbook_tables
+from .tools import Ods, Recorder, Xlsx, days_between, read_table, round_half_up
 
-SKIP_SHEET = re.compile(r"cover|contents|notes|about", re.I)
+CRS = {"British National Grid (EPSG:27700)": "EPSG:27700", "WGS 84 longitude/latitude (EPSG:4326)": "EPSG:4326",
+       "Web Mercator (EPSG:3857)": "EPSG:3857", "Lambert-93 France (EPSG:2154)": "EPSG:2154",
+       "ETRS89 / UTM zone 33N (EPSG:25833)": "EPSG:25833", "ETRS89 / UTM zone 32N (EPSG:25832)": "EPSG:25832",
+       "Swiss CH1903+ / LV95 (EPSG:2056)": "EPSG:2056", "ETRS89 / LAEA Europe (EPSG:3035)": "EPSG:3035",
+       "Irish Transverse Mercator (EPSG:2157)": "EPSG:2157", "GDA94 / MGA zone 55 (EPSG:28355)": "EPSG:28355"}
+AREA_UNITS = {"hectares": 1e4, "square metres": 1.0, "square kilometres": 1e6, "acres": 4046.8564224}
 
-
-def clean_name(p: Path) -> str:
-    return re.sub(r"^SRC_[0-9a-f]+__", "", Path(p).name)
-
-
-# ------------------------------------------------------------------ digests (what the model sees about each file)
-def _idx_to_col(i: int) -> str:
-    s = ""
-    while i:
-        i, r = divmod(i - 1, 26)
-        s = chr(65 + r) + s
-    return s
-
-
-def _is_year(v) -> bool:
-    try:
-        f = float(str(v).strip())
-        return f == int(f) and 1900 <= f <= 2100
-    except ValueError:
-        return False
-
-
-def _sheet_digest(name: str, grid: dict, max_rows: int = 45, max_cols: int = 6) -> str:
-    """grid: {(row, col): text}. Shows addressed cells for the top-left block and a year->column map for wide sheets."""
-    lines = [f"sheet '{name}'"]
-    rows = sorted({r for r, _ in grid})
-    ncols = max((c for _, c in grid), default=0)
-    for r in rows[:max_rows]:
-        cells = [f"{_idx_to_col(c)}{r}={str(grid[(r, c)])[:28]!r}" for c in range(1, max_cols + 1) if grid.get((r, c)) not in (None, "")]
-        if cells:
-            lines.append("  " + " ".join(cells))
-    if ncols > max_cols:
-        for r in rows[:12]:
-            cols = [c for c in range(1, ncols + 1) if _is_year(grid.get((r, c)))]
-            if len(cols) < 5:
-                continue
-            runs, cur = [], [cols[0]]  # a sheet may repeat its year header (a second table further right): report each run
-            for c in cols[1:]:
-                if c - cur[-1] <= 2:
-                    cur.append(c)
-                else:
-                    runs.append(cur)
-                    cur = [c]
-            runs.append(cur)
-            for k, run in enumerate(runs, 1):
-                m = ", ".join(f"{str(grid[(r, c)]).split('.')[0]}:{_idx_to_col(c)}" for c in run[-8:])
-                lines.append(f"  year->column, row {r}, table {k} (cols {_idx_to_col(run[0])}-{_idx_to_col(run[-1])}, last 8 years): {m}")
-            break
-    return "\n".join(lines)
+OPS = {
+    "value": "read value(s) of named items for given period(s) from a table",
+    "change": "change of one or more items between two periods (absolute and percent); also says which item changed most",
+    "percent_of": "a later period's value as a percentage of an earlier period's value (e.g. 2025 as % of 2019) for one or more items",
+    "share": "a part as a percentage of a whole in the same period (e.g. one sector's share of a total), for one or more part/whole pairs",
+    "ratio": "one quantity divided by another, possibly from two different tables (e.g. distance per journey)",
+    "record_lookup": "read fields of one record found by its key in a CSV/table (e.g. dates of one order), optionally days between two date fields",
+    "count_blank": "count empty values in one column of a CSV/table, and the total number of records",
+    "compare_keys": "compare a key column between two files: values only in one file, and duplicates in each",
+    "area": "area of one feature/polygon in a geographic file, computed in a stated coordinate system",
+    "explain": "the question asks what the data means or supports (e.g. whether a value can be treated as zero) rather than a calculation",
+}
 
 
-def digest(path: Path) -> str:
-    suf = Path(path).suffix.lower()
-    name = clean_name(path)
-    try:
-        if suf == ".xlsx":
-            x = Xlsx(path)
-            parts = []
-            for sh in x.sheets():
-                if SKIP_SHEET.search(sh):
-                    continue
-                ws = x.wb[sh]
-                grid = {(c.row, c.column): c.value for row in ws.iter_rows(min_row=1, max_row=60, max_col=70) for c in row if c.value is not None}
-                parts.append(_sheet_digest(sh, grid))
-            return f"FILE {name}\n" + "\n".join(parts[:4])
-        if suf == ".ods":
-            o = Ods(path)
-            parts = []
-            for sh in o.sheets():
-                if SKIP_SHEET.search(sh):
-                    continue
-                g = {k: (v[1] or v[0]) for k, v in o._grid(sh).items() if k[0] <= 60 and k[1] <= 70 and (v[1] or v[0]) not in (None, "")}
-                parts.append(_sheet_digest(sh, g, max_rows=34, max_cols=7))
-            return f"FILE {name}\n" + "\n".join(parts[:6])
-        if is_guide(path):
-            return f"GUIDE {name}\n" + guide_text(path)[:2500]
-        return f"FILE {name}\n" + card_for_file(path)[:2500]
-    except Exception as e:  # a digest failure must not kill the run
-        return f"FILE {name} (digest failed: {type(e).__name__})"
+# ------------------------------------------------------------------ sources
+@dataclass
+class Source:
+    sid: str
+    kind: str  # table | csv | geo | text
+    file: Path
+    desc: str
+    table: Table | None = None
+    columns: list[str] = field(default_factory=list)
 
 
-# ------------------------------------------------------------------ tools
-TOOL_HELP = """Tools (JSON steps; each has a unique "id"; later steps may use earlier ids as variables in "expr"):
-- {"id":"a","tool":"cell","args":{"file":"<file name>","sheet":"<sheet>","ref":"<A1 address>"}}  -> number from a workbook cell
-- {"id":"t","tool":"csv_value","args":{"file":"<csv>","where_col":"<column>","where_val":"<value>","col":"<column to read>"}}  -> text from the row where where_col==where_val
-- {"id":"p","tool":"polygon_area_ha","args":{"file":"<geojson>","id_field":"<property>","id_value":"<value>","crs":"EPSG:xxxx"}}  -> area in hectares (planar, in that CRS)
-- {"id":"r","tool":"calc","args":{"expr":"<formula>"}}  formulas use earlier ids, + - * /, and functions
-    pct_change(old,new), share(part,whole), days(date_from,date_to)  (dates are ISO strings from csv_value; days = to - from)
-Reply with ONLY JSON: {"steps":[...],"final":"<id of the step holding the main result>"}"""
+def _geo_fields(p: Path):
+    import pyogrio
+    info = pyogrio.read_info(p)
+    return list(info["fields"]), str(info.get("crs") or ""), int(info.get("features") or 0)
 
 
-class ToolError(Exception):
+def build_sources(files: list[Path]) -> list[Source]:
+    out: list[Source] = []
+
+    def add(kind, f, desc, **kw):
+        out.append(Source(f"S{len(out) + 1}", kind, f, desc, **kw))
+
+    for f in sorted(files, key=lambda p: clean_name(p).lower()):
+        suf, name = f.suffix.lower(), clean_name(f)
+        try:
+            if suf in (".xlsx", ".ods"):
+                for t in workbook_tables(f):
+                    add("table", f, t.describe(), table=t)
+            elif suf in (".csv", ".tsv") or (suf == ".txt" and not is_guide(f) and f.stat().st_size < 50_000_000 and "," in f.open(encoding="utf-8-sig", errors="ignore").readline()):
+                df = read_table(f, nrows=200)
+                add("csv", f, f"[{name}] table with {len(df.columns)} columns: {', '.join(df.columns[:25])}", columns=list(df.columns))
+            elif suf in (".geojson", ".gpkg", ".shp", ".gml"):
+                flds, crs, n = _geo_fields(f)
+                add("geo", f, f"[{name}] geographic layer, {n} features, CRS {crs or '?'}, fields: {', '.join(flds[:25])}", columns=flds)
+            elif is_guide(f) or suf in (".md", ".txt", ".pdf", ".html"):
+                snippet = re.sub(r"\s+", " ", guide_text(f))[:300] if is_guide(f) else ""
+                add("text", f, f"[{name}] document/notes" + (f": {snippet}" if snippet else ""))
+        except Exception as e:
+            add("text", f, f"[{name}] (could not be read as data: {type(e).__name__})")
+    return out
+
+
+# ------------------------------------------------------------------ helpers
+class Fail(Exception):
     pass
 
 
-def _find_file(files: list[Path], want: str) -> Path:
-    w = want.lower().strip()
-    for f in files:
-        if clean_name(f).lower() == w:
-            return f
-    hits = [f for f in files if w in clean_name(f).lower() or clean_name(f).lower() in w]
-    if len(hits) == 1:
-        return hits[0]
-    raise ToolError(f"file not found/ambiguous: {want!r}")
+def _fmt(v, nd=2) -> str:
+    return f"{round_half_up(v, nd):,.{nd}f}"
 
 
-_SAFE = {"pct_change": pct_change, "share": share, "days": days_between, "abs": abs, "round": round}
+def _num(v):
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return float(v)
+    try:
+        return float(str(v).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
 
 
-def safe_eval(expr: str, env: dict):
-    tree = ast.parse(expr, mode="eval")
-    for n in ast.walk(tree):
-        if not isinstance(n, (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Call, ast.Name, ast.Load, ast.Constant, ast.Add, ast.Sub, ast.Mult, ast.Div, ast.USub, ast.UAdd, ast.Pow)):
-            raise ToolError(f"disallowed syntax in expr: {type(n).__name__}")
-        if isinstance(n, ast.Call) and not (isinstance(n.func, ast.Name) and n.func.id in _SAFE):
-            raise ToolError("disallowed function")
-    return eval(compile(tree, "<expr>", "eval"), {"__builtins__": {}}, {**_SAFE, **env})
+def _enum_schema(props: dict, required: list[str] | None = None) -> dict:
+    return {"type": "object", "properties": props, "required": required or list(props)}
 
 
-class Runner:
-    def __init__(self, files: list[Path], context: str):
-        self.files, self.rec = files, Recorder()
-        self.displayed = bool(re.search(r"visibly formatted|as displayed|displayed value|as shown", context, re.I))
-        self.vals: dict = {}
-        self._wb: dict = {}
-
-    def _book(self, f: Path):
-        if f not in self._wb:
-            self._wb[f] = Ods(f, self.rec) if f.suffix.lower() == ".ods" else Xlsx(f, self.rec)
-        return self._wb[f]
-
-    def run(self, plan: dict) -> dict:
-        steps = plan.get("steps")
-        if not isinstance(steps, list) or not steps:
-            raise ToolError("plan has no steps")
-        for s in steps:
-            sid, tool, a = s.get("id"), s.get("tool"), s.get("args", {})
-            if not sid or sid in self.vals:
-                raise ToolError(f"bad/duplicate id {sid!r}")
-            if tool == "cell":
-                f = _find_file(self.files, a["file"])
-                bk = self._book(f)
-                v = bk.cell(a["sheet"], a["ref"], shown=self.displayed)
-                if v is None:
-                    raise ToolError(f"empty cell {a['sheet']}!{a['ref']}")
-                self.vals[sid] = v
-            elif tool == "csv_value":
-                f = _find_file(self.files, a["file"])
-                df = read_table(f)
-                m = df[df[a["where_col"]] == str(a["where_val"])]
-                if len(m) != 1:
-                    raise ToolError(f"{len(m)} rows where {a['where_col']}=={a['where_val']}")
-                self.vals[sid] = m.iloc[0][a["col"]]
-                self.rec.add(f"{clean_name(f)}, {a['where_col']}={a['where_val']}, column {a['col']}")
-            elif tool == "polygon_area_ha":
-                from .tools import polygon_area
-                f = _find_file(self.files, a["file"])
-                r = polygon_area(f, a["id_field"], str(a["id_value"]), a["crs"], rec=self.rec)
-                if r.value is None:
-                    raise ToolError(r.scope)
-                self.vals[sid] = r.value / 10_000
-            elif tool == "calc":
-                self.vals[sid] = safe_eval(str(a["expr"]), {k: v for k, v in self.vals.items()})
-            else:
-                raise ToolError(f"unknown tool {tool!r}")
-        final = plan.get("final") or steps[-1]["id"]
-        if final not in self.vals:
-            raise ToolError(f"final id {final!r} missing")
-        return self.vals
-
-
-# ------------------------------------------------------------------ prompts
-PLAN_SYS = ("You plan data calculations. Use ONLY the tools described. Read exact values from the files shown; never invent numbers. "
-            "Follow the Context's conventions. Output JSON only.")
-
-
-def _extract_json(text: str):
-    text = re.sub(r"```(?:json)?", "", text)
-    i = text.find("{")
-    if i < 0:
-        raise ValueError("no JSON object")
-    depth = 0
-    for j in range(i, len(text)):
-        depth += text[j] == "{"
-        depth -= text[j] == "}"
-        if depth == 0:
-            return json.loads(text[i:j + 1])
-    raise ValueError("unterminated JSON")
-
-
-def build_context_block(files: list[Path]) -> str:
-    return "\n\n".join(digest(f) for f in files)
-
-
-def fmt_val(v) -> str:
-    return f"{round_half_up(v, 2):,.2f}" if isinstance(v, (int, float)) and not isinstance(v, bool) else str(v)
-
-
-def answer_with_tools(llm: LLM, question: str, context: str, files: list[Path], think_plan: bool = False, retries: int = 2) -> dict:
-    led = Ledger()
-    blk = build_context_block(files)
-    user = f"{TOOL_HELP}\n\nFILES\n{blk}\n\nCONTEXT: {context}\n\nQUESTION: {question}\n\nJSON plan:"
-    msgs = [{"role": "system", "content": PLAN_SYS}, {"role": "user", "content": user}]
-    plan, run, err, runner, out = None, None, None, None, {"text": ""}
-    for attempt in range(retries + 1):
+def _ask_json(llm: LLM, led: Ledger, msgs: list[dict], schema: dict, tag: str, validate, tries: int = 3, max_tokens: int = 600):
+    """Call with an enforced JSON schema, parse, validate; feed errors back. Returns validated value."""
+    last = None
+    for k in range(tries):
+        out = llm.chat(msgs, led, think=False, profile="extract", max_tokens=max_tokens, json_mode=schema, tag=f"{tag}{k}")
         try:
-            out = llm.chat(msgs, led, think=think_plan, max_tokens=2500 if think_plan else 900, json_mode=True, tag=f"plan{attempt}")
-            plan = _extract_json(out["text"])
-            runner = Runner(files, context)
-            run = runner.run(plan)
-            err = None
-            break
-        except BudgetExceeded:
-            err = "budget"
-            break
-        except Exception as e:  # invalid JSON / tool error -> feed back and retry
-            err = f"{type(e).__name__}: {e}"
-            msgs += [{"role": "assistant", "content": out["text"]},{"role": "user", "content": f"That failed: {err}. Fix the plan and reply with JSON only."}]
-    if err or run is None:
-        return {"answer": "", "evidence": [], "plan": plan, "error": err, "ledger": led.summary()}
-    results = {k: fmt_val(v) for k, v in run.items()}
-    comp = (f"Write the final answer in 1-3 plain sentences. Use ONLY these computed results, quoted exactly as given (already rounded). "
-            f"Restate what each value is, with units.\nQUESTION: {question}\nCONTEXT: {context}\nRESULTS: {json.dumps(results, ensure_ascii=False)}\nMain result: {results[plan.get('final') or plan['steps'][-1]['id']]}")
-    try:
-        out = llm.chat([{"role": "user", "content": comp}], led, think=False, max_tokens=300, tag="compose")
-        ans = out["text"].strip()
-    except BudgetExceeded:
-        ans = ""
-    return {"answer": ans, "evidence": runner.rec.items, "plan": plan, "results": results, "error": None, "ledger": led.summary()}
+            obj = json.loads(out["text"])
+            return validate(obj)
+        except (Fail, ValueError, KeyError, TypeError) as e:
+            last = f"{type(e).__name__}: {e}"
+            msgs = msgs + [{"role": "assistant", "content": out["text"]}, {"role": "user", "content": f"That is invalid: {last}. Answer again with corrected JSON."}]
+    raise Fail(f"{tag} failed after {tries} tries: {last}")
 
 
-def answer_baseline(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
-    """No tools: model answers from the digests alone (reference point for how much the tools add)."""
+# ------------------------------------------------------------------ executor
+class Exec:
+    def __init__(self, context: str):
+        self.rec = Recorder()
+        self.displayed = bool(re.search(r"visibly formatted|as displayed|displayed (value|number)|as shown|visible (value|number)", context, re.I))
+        self._books = {}
+
+    def cell(self, t: Table, entity: str, period: str):
+        a1 = t.addr.get((entity, period))
+        if a1 is None:
+            raise Fail(f"no cell for {entity!r} in {period!r}")
+        if t.file not in self._books:
+            self._books[t.file] = Ods(t.file, self.rec) if t.file.suffix.lower() == ".ods" else Xlsx(t.file, self.rec)
+        v = self._books[t.file].cell(t.sheet, a1, shown=self.displayed)
+        return v, a1
+
+    def num(self, t, e, p):
+        v, a1 = self.cell(t, e, p)
+        n = _num(v)
+        if n is None:
+            raise Fail(f"{e} in {p} is {v!r} (cell {a1}), not a number")
+        return n, a1
+
+
+def _strip_cells(s: str) -> str:
+    s = re.sub(r"\s*\(cells? [A-Z]{1,3}\d+\)", "", s)
+    s = re.sub(r";\s*cells? [A-Z]{1,3}\d+", "", s)
+    return s.rstrip(".") + "."
+
+
+def _label(e: str, gloss: dict) -> str:
+    parts = [gloss.get(x, x) for x in e.split(" / ")]
+    return " / ".join(parts)
+
+
+def run_table_op(op, b, srcs, ex: Exec, gloss: dict):
+    """Returns (facts list[str], key numbers list[str])."""
+    t = srcs[0].table
+    unit = t.unit or ""
+    facts, keys = [], []
+    L = lambda e: _label(e, gloss)
+    if op == "value":
+        for e in b["entities"]:
+            for p in b["periods"]:
+                v, a1 = ex.cell(t, e, p)
+                n = _num(v)
+                s = _fmt(n) if n is not None and not float(n).is_integer() else (f"{int(n):,}" if n is not None else repr(v))
+                facts.append(f"{L(e)} in {p}: {s} {unit} (cell {a1})")
+                if n is not None:
+                    keys.append(s)
+    elif op in ("change", "percent_of"):
+        f, to = b["period_from"], b["period_to"]
+        rows = []
+        for e in b["entities"]:
+            v0, a0 = ex.num(t, e, f)
+            v1, a1 = ex.num(t, e, to)
+            if op == "change":
+                d, pc = v1 - v0, (v1 - v0) / v0 * 100
+                rows.append((e, d, pc))
+                facts.append(f"{L(e)}: {_fmt(v0)} in {f} (cell {a0}) -> {_fmt(v1)} in {to} (cell {a1}); change {_fmt(d)} {unit}, {_fmt(pc)}%")
+                keys += [_fmt(d), _fmt(pc)]
+            else:
+                r = v1 / v0 * 100
+                rows.append((e, r, None))
+                facts.append(f"{L(e)}: {to} value {_fmt(v1, 0) if v1.is_integer() else _fmt(v1)} (cell {a1}) is {_fmt(r)}% of the {f} value {_fmt(v0, 0) if v0.is_integer() else _fmt(v0)} (cell {a0})")
+                keys.append(_fmt(r))
+        if len(rows) > 1:
+            if op == "change":
+                bd = max(rows, key=lambda x: x[1])
+                bp = max(rows, key=lambda x: x[2])
+                facts.append(f"Largest absolute change: {L(bd[0])} ({_fmt(bd[1])} {unit}). Largest percentage change: {L(bp[0])} ({_fmt(bp[2])}%).")
+            else:
+                close = min(rows, key=lambda x: abs(x[1] - 100))
+                facts.append(f"Closest to the earlier level (100%): {L(close[0])} at {_fmt(close[1])}%.")
+    elif op == "share":
+        p = b["period"]
+        res = []
+        for pr in b["pairs"]:
+            vp, ap = ex.num(t, pr["part"], p)
+            vw, aw = ex.num(t, pr["whole"], p)
+            s = vp / vw * 100
+            res.append((pr["part"], s))
+            facts.append(f"{L(pr['part'])} = {_fmt(vp)} {unit} (cell {ap}) is {_fmt(s)}% of {L(pr['whole'])} = {_fmt(vw)} {unit} (cell {aw}) in {p}")
+            keys.append(_fmt(s))
+        if len(res) == 2:
+            hi, lo = max(res, key=lambda x: x[1]), min(res, key=lambda x: x[1])
+            gap = round_half_up(hi[1], 10) - round_half_up(lo[1], 10)
+            facts.append(f"{L(hi[0])} is higher by {_fmt(gap)} percentage points.")
+            keys.append(_fmt(gap))
+    elif op == "ratio":
+        tn, td = srcs[0].table, srcs[-1].table
+        vn, an = ex.num(tn, b["numerator"]["entity"], b["numerator"]["period"])
+        vd, ad = ex.num(td, b["denominator"]["entity"], b["denominator"]["period"])
+        r = (vn * tn.scale) / (vd * td.scale)
+        facts.append(f"{L(b['numerator']['entity'])} {b['numerator']['period']}: {vn:g} ({tn.unit}, {tn.title[:80]}; cell {an}) divided by "
+                     f"{L(b['denominator']['entity'])} {b['denominator']['period']}: {vd:g} ({td.unit}, {td.title[:80]}; cell {ad}) = {_fmt(r)} (unit scales applied: {tn.scale:g} / {td.scale:g})")
+        keys.append(_fmt(r))
+    return facts, keys
+
+
+def run_record_op(op, b, srcs, ex: Exec):
+    facts, keys = [], []
+    s = srcs[0]
+    if s.kind == "geo":
+        import geopandas as gpd
+        df = gpd.read_file(s.file).drop(columns="geometry")
+    else:
+        df = read_table(s.file)
+    name = clean_name(s.file)
+    if op == "record_lookup":
+        kc, kv = b["key_column"], str(b["key_value"]).strip()
+        m = df[df[kc].astype(str).str.strip() == kv]
+        if len(m) == 0:
+            m = df[df[kc].astype(str).str.strip().str.lower() == kv.lower()]
+        if len(m) != 1:
+            raise Fail(f"{len(m)} records where {kc} == {kv!r}")
+        r = m.iloc[0]
+        flds = list(dict.fromkeys(b.get("fields", []) + b.get("days_between", [])))
+        for fcol in flds:
+            v = r[fcol]
+            pretty = v
+            try:
+                d = pd.to_datetime(v, dayfirst=not re.match(r"^\d{4}-", str(v)))
+                pretty = f"{v} ({d.day} {d.strftime('%B %Y')})"
+            except Exception:
+                pass
+            facts.append(f"{kv}: {fcol} = {pretty}")
+        ex.rec.add(f"{name}, {kc}={kv}, {' and '.join(flds)}")
+        db = b.get("days_between") or []
+        if len(db) == 2:
+            a, c = (pd.to_datetime(r[x], dayfirst=not re.match(r"^\d{4}-", str(r[x]))).date().isoformat() for x in db)
+            n = days_between(a, c)
+            facts.append(f"Days from {db[0]} to {db[1]} (excluding the starting day): {n}")
+            keys.append(str(n))
+    elif op == "count_blank":
+        c = b["column"]
+        blank = int(df[c].map(lambda v: v is None or (isinstance(v, float) and v != v) or str(v).strip() == "").sum())
+        facts.append(f"{name}: {blank} of {len(df)} records have a blank {c}")
+        keys += [str(blank), str(len(df))]
+        ex.rec.add(f"{name}, {c} column")
+    elif op == "compare_keys":
+        s2 = srcs[-1]
+        df2 = read_table(s2.file) if s2.kind == "csv" else __import__("geopandas").read_file(s2.file)
+        a = df[b["column_a"]].astype(str).str.strip()
+        c = df2[b["column_b"]].astype(str).str.strip()
+        only_a, only_b = sorted(set(a) - set(c)), sorted(set(c) - set(a))
+        da, dc = sorted(a[a.duplicated()].unique()), sorted(c[c.duplicated()].unique())
+        facts.append(f"{name}.{b['column_a']} ({len(a)} rows) vs {clean_name(s2.file)}.{b['column_b']} ({len(c)} rows): "
+                     f"{len(only_a)} values only in the first {only_a[:5]}, {len(only_b)} only in the second {only_b[:5]}; "
+                     f"duplicates: {len(da)} in the first {da[:5]}, {len(dc)} in the second {dc[:5]}")
+        keys += [str(len(only_a)), str(len(only_b))]
+        ex.rec.add(f"{name}, {b['column_a']} column; {clean_name(s2.file)}, {b['column_b']}")
+    return facts, keys
+
+
+def run_area(b, s: Source, ex: Exec):
+    import geopandas as gpd
+    g = gpd.read_file(s.file)
+    m = g[g[b["id_field"]].astype(str).str.strip() == str(b["id_value"]).strip()]
+    if len(m) != 1:
+        raise Fail(f"{len(m)} features where {b['id_field']} == {b['id_value']!r}")
+    crs = CRS[b["crs"]]
+    geom = m.to_crs(crs).geometry.iloc[0]
+    unit = b["unit"]
+    v = geom.area / AREA_UNITS[unit]
+    ex.rec.add(f"{clean_name(s.file)}, properties.{b['id_field']}={b['id_value']}")
+    return [f"Area of {b['id_field']}={b['id_value']}: {_fmt(v)} {unit} (computed in {crs}, geometry {'valid' if geom.is_valid else 'INVALID'}, not repaired)"], [_fmt(v)]
+
+
+def explain_context(srcs: list[Source], all_srcs: list[Source]) -> str:
+    """Text the model needs for 'what does the data support' questions: table header lines, notes sheets, guides."""
+    parts, seen = [], set()
+    for s in srcs:
+        if s.kind == "table" and s.file not in seen:
+            seen.add(s.file)
+            parts.append(f"--- {clean_name(s.file)}, sheet {s.table.sheet}, header lines:\n" + sheet_text(s.file, s.table.sheet, 1200).split("\nr8")[0][:1200])
+            for sh in ("Notes", "notes", "NOTES"):
+                txt = sheet_text(s.file, sh, 2500)
+                if txt:
+                    parts.append(f"--- {clean_name(s.file)}, sheet {sh}:\n{txt}")
+    for s in all_srcs:
+        if s.kind == "text" and is_guide(s.file):
+            parts.append(f"--- {clean_name(s.file)}:\n{guide_text(s.file)[:1500]}")
+    return "\n".join(parts)[:7000]
+
+
+# ------------------------------------------------------------------ main entry
+SYS = ("You are a careful municipal data analyst. You never invent values: you only choose among the options offered. "
+       "Read the question and the Context carefully and choose exactly what they ask for.")
+
+
+def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
     led = Ledger()
-    prompt = f"FILES\n{build_context_block(files)}\n\nCONTEXT: {context}\n\nQUESTION: {question}\n\nAnswer concisely with exact numbers and name the file and cells/columns you used."
+    trace: dict = {}
     try:
-        out = llm.chat([{"role": "user", "content": prompt}], led, think=False, max_tokens=500, tag="direct")
-        txt = out["text"].strip()
-    except BudgetExceeded:
-        txt = ""
-    return {"answer": txt, "evidence": [txt], "plan": None, "error": None, "ledger": led.summary()}
+        srcs = build_sources(files)
+        if not srcs:
+            raise Fail("no readable sources")
+        by_id = {s.sid: s for s in srcs}
+        catalog = "\n".join(f"{s.sid}: {s.desc}" for s in srcs)
+        ops_txt = "\n".join(f"- {k}: {v}" for k, v in OPS.items())
+        # ---- call 1: operation + sources
+        sch = _enum_schema({"operation": {"type": "string", "enum": list(OPS)},
+                            "sources": {"type": "array", "items": {"type": "string", "enum": list(by_id)}, "minItems": 1, "maxItems": 2}})
+        msg = [{"role": "system", "content": SYS},
+               {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nOPERATIONS:\n{ops_txt}\n\nSOURCES:\n{catalog}\n\n"
+                                           "Choose the operation that answers the main calculation in the question, and the source(s) holding the data "
+                                           "(two sources only for ratio or compare_keys across files). Reply as JSON."}]
+
+        def v1(o):
+            if o["operation"] not in OPS:
+                raise Fail("unknown operation")
+            ss = [by_id[x] for x in o["sources"]]
+            kinds = {s.kind for s in ss}
+            need = {"value": {"table"}, "change": {"table"}, "percent_of": {"table"}, "share": {"table"}, "ratio": {"table"},
+                    "record_lookup": {"csv", "geo"}, "count_blank": {"csv", "geo"}, "compare_keys": {"csv", "geo"}, "area": {"geo"}, "explain": None}[o["operation"]]
+            if need and not kinds <= need:
+                raise Fail(f"operation {o['operation']} needs a source of kind {sorted(need)}, got {sorted(kinds)}")
+            return o
+        plan = _ask_json(llm, led, msg, sch, "plan", v1)
+        op, ss = plan["operation"], [by_id[x] for x in plan["sources"]]
+        trace["plan"] = {"op": op, "sources": [s.desc[:90] for s in ss]}
+        ex = Exec(context)
+        gloss: dict = {}
+        # ---- call 2: gloss non-English labels of chosen tables
+        tabs = [s.table for s in ss if s.kind == "table"]
+        labels = sorted({part for t in tabs for e in t.entities for part in e.split(" / ")})
+        if tabs and any(re.search(r"[^\x00-\x7f]", x) for x in labels) and len(labels) <= 150:
+            gs = _enum_schema({x: {"type": "string"} for x in labels})
+            gm = [{"role": "user", "content": "Translate each spreadsheet label to short English (keep place names). Labels:\n" + "\n".join(labels) + "\nReply as JSON {label: english}."}]
+            try:
+                gloss = _ask_json(llm, led, gm, gs, "gloss", lambda o: {k: str(v) for k, v in o.items() if k in labels}, tries=1, max_tokens=900)
+            except Fail:
+                gloss = {}
+            trace["gloss"] = gloss
+        # ---- call 3: bind arguments to real labels
+        facts, keys = [], []
+        if op in ("value", "change", "percent_of", "share", "ratio", "explain") and tabs:
+            t0 = ss[0].table
+            show = lambda t: "\n".join(f"  {e}" + (f"   (= {_label(e, gloss)})" if gloss and _label(e, gloss) != e else "") for e in t.entities)
+            E, P = t0.entities, t0.periods
+            if op == "value" or op == "explain":
+                bs = _enum_schema({"entities": {"type": "array", "items": {"type": "string", "enum": E}, "minItems": 1, "maxItems": 8},
+                                   "periods": {"type": "array", "items": {"type": "string", "enum": P}, "minItems": 1, "maxItems": 6}})
+            elif op in ("change", "percent_of"):
+                bs = _enum_schema({"entities": {"type": "array", "items": {"type": "string", "enum": E}, "minItems": 1, "maxItems": 8},
+                                   "period_from": {"type": "string", "enum": P}, "period_to": {"type": "string", "enum": P}})
+            elif op == "share":
+                bs = _enum_schema({"pairs": {"type": "array", "minItems": 1, "maxItems": 4, "items": _enum_schema({"part": {"type": "string", "enum": E}, "whole": {"type": "string", "enum": E}})},
+                                   "period": {"type": "string", "enum": P}})
+            else:  # ratio
+                t1 = ss[-1].table
+                bs = _enum_schema({"numerator": _enum_schema({"entity": {"type": "string", "enum": E}, "period": {"type": "string", "enum": P}}),
+                                   "denominator": _enum_schema({"entity": {"type": "string", "enum": t1.entities}, "period": {"type": "string", "enum": t1.periods}})})
+            listing = f"TABLE {t0.id}\nTitle: {t0.title}\nUnit: {t0.unit}\nItems:\n{show(t0)}\nPeriods: {', '.join(P)}"
+            if op == "ratio" and ss[-1] is not ss[0]:
+                t1 = ss[-1].table
+                listing = f"NUMERATOR {listing}\n\nDENOMINATOR TABLE {t1.id}\nTitle: {t1.title}\nUnit: {t1.unit}\nItems:\n{show(t1)}\nPeriods: {', '.join(t1.periods)}"
+            how = {"value": "Pick the item(s) and period(s) the question asks about.",
+                   "explain": "Pick the item(s) and period(s) whose values the question is about.",
+                   "change": "Pick every item the question compares, and the start (period_from) and end (period_to) periods.",
+                   "percent_of": "Pick the item(s); period_from is the earlier/base period, period_to is the later period.",
+                   "share": "For each part/whole pair pick the part item and the matching whole (total) item of the SAME group, and the period.",
+                   "ratio": "Pick the numerator item and period, and the denominator item and period."}[op]
+            bm = [{"role": "system", "content": SYS},
+                  {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\n{listing}\n\n{how} Use labels exactly as listed. Reply as JSON."}]
+
+            def vb(o):
+                if op == "change" and o["period_from"] == o["period_to"]:
+                    raise Fail("period_from and period_to must differ")
+                if op == "percent_of" and o["period_from"] == o["period_to"]:
+                    raise Fail("the two periods must differ")
+                if op == "share":
+                    for pr in o["pairs"]:
+                        if pr["part"] == pr["whole"]:
+                            raise Fail("part and whole must differ")
+                if op == "explain":
+                    return o
+                # dry-run: every value must resolve to a number
+                run_table_op(op, o, ss, Exec(context), gloss)
+                return o
+            b = _ask_json(llm, led, bm, bs, "bind", vb)
+            trace["bind"] = b
+            if op == "explain":
+                for e in b["entities"]:
+                    for p in b["periods"]:
+                        v, a1 = ex.cell(t0, e, p)
+                        facts.append(f"{_label(e, gloss)} in {p}: {v!r} (cell {a1})")
+            else:
+                facts, keys = run_table_op(op, b, ss, ex, gloss)
+        elif op in ("record_lookup", "count_blank", "compare_keys", "area") or (op == "explain" and not tabs):
+            s0 = ss[0]
+            C = s0.columns
+            if op == "record_lookup":
+                bs = _enum_schema({"key_column": {"type": "string", "enum": C}, "key_value": {"type": "string"},
+                                   "fields": {"type": "array", "items": {"type": "string", "enum": C}, "minItems": 1, "maxItems": 6},
+                                   "days_between": {"type": "array", "items": {"type": "string", "enum": C}, "maxItems": 2}})
+                how = "Pick the key column and the key value (copied from the question), the fields to report, and, if the question asks for days between two dates, the two date fields in chronological order (else an empty list)."
+            elif op == "count_blank":
+                bs = _enum_schema({"column": {"type": "string", "enum": C}})
+                how = "Pick the column whose empty values must be counted."
+            elif op == "compare_keys":
+                C2 = ss[-1].columns
+                bs = _enum_schema({"column_a": {"type": "string", "enum": C}, "column_b": {"type": "string", "enum": C2}})
+                how = f"Pick the key column in the first file ({clean_name(s0.file)}) and in the second file ({clean_name(ss[-1].file)})."
+            elif op == "area":
+                bs = _enum_schema({"id_field": {"type": "string", "enum": C}, "id_value": {"type": "string"},
+                                   "crs": {"type": "string", "enum": list(CRS)}, "unit": {"type": "string", "enum": list(AREA_UNITS)}})
+                how = "Pick the identifier field and value (copied from the question), the coordinate system the question or Context asks for, and the area unit."
+            else:
+                bs, how = None, ""
+            sample = ""
+            if s0.kind in ("csv", "geo"):
+                try:
+                    df = read_table(s0.file, nrows=3) if s0.kind == "csv" else __import__("geopandas").read_file(s0.file, rows=3).drop(columns="geometry")
+                    sample = "Example rows:\n" + df.head(3).to_csv(index=False)[:1500]
+                except Exception:
+                    pass
+            if bs:
+                bm = [{"role": "system", "content": SYS},
+                      {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nFILE {clean_name(s0.file)} columns: {', '.join(C)}\n{sample}\n{how} Reply as JSON."}]
+
+                def vb(o):
+                    if op == "area":
+                        run_area(o, s0, Exec(context))
+                    else:
+                        run_record_op(op, o, ss, Exec(context))
+                    return o
+                b = _ask_json(llm, led, bm, bs, "bind", vb)
+                trace["bind"] = b
+                facts, keys = run_area(b, s0, ex) if op == "area" else run_record_op(op, b, ss, ex)
+        # ---- call 4: write the answer
+        ctx_txt = explain_context(ss, srcs) if op == "explain" else ""
+        wm = [{"role": "system", "content": "You write short, exact answers for municipal briefings."},
+              {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nCOMPUTED FACTS (exact; copy numbers verbatim, do not recompute or round differently):\n"
+                                          + "\n".join(f"- {x}" for x in facts) + (f"\n\nSOURCE TEXT:\n{ctx_txt}" if ctx_txt else "")
+                                          + "\n\nAnswer every part of the question in 1-3 plain sentences, with units. If the question asks yes/no, start with Yes or No. "
+                                            "If the data does not support what is asked, say so and why. Do not mention cells or files."}]
+        try:
+            out = llm.chat(wm, led, think=False, profile="write", max_tokens=350, tag="write")
+            ans = out["text"].strip()
+        except BudgetExceeded:
+            ans = ""
+        cand = numbers(ans)
+        missing = [k for k in keys if not any(abs(float(k.replace(",", "")) - c) < 1e-9 for c in cand)]
+        if keys and missing:
+            trace["write_fallback"] = {"missing": missing, "model_answer": ans}
+            ans = " ".join(_strip_cells(x) for x in facts)
+        return {"answer": ans, "evidence": ex.rec.items, "facts": facts, "trace": trace, "error": None, "ledger": led.summary()}
+    except (Fail, BudgetExceeded) as e:
+        return {"answer": "", "evidence": [], "facts": [], "trace": trace, "error": f"{type(e).__name__}: {e}", "ledger": led.summary()}

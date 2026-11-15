@@ -11,10 +11,12 @@ from dataclasses import dataclass, field
 MAX_CALLS = 15
 MAX_TOKENS = 12_000
 
-# Qwen3.5 model-card sampling profiles. Greedy is avoided (small model loops); reproducibility comes from a fixed seed.
+# Sampling profiles. Reproducibility comes from a fixed seed. "extract" is near-greedy for schema-constrained choices.
 PROFILES = {
     "thinking": dict(temperature=1.0, top_p=0.95, top_k=20, presence_penalty=1.5),
     "precise": dict(temperature=0.6, top_p=0.95, top_k=20, presence_penalty=0.0),
+    "extract": dict(temperature=0.0, top_p=1.0, top_k=1),
+    "write": dict(temperature=0.2, top_p=0.9, top_k=40),
 }
 
 
@@ -43,11 +45,11 @@ class Ledger:
 
 
 class LLM:
-    def __init__(self, model: str = "qwen3.5:2b", url: str = "http://127.0.0.1:11434", seed: int = 1234, timeout: int = 900):
+    def __init__(self, model: str = "qwen2.5:3b-instruct", url: str = "http://127.0.0.1:11434", seed: int = 1234, timeout: int = 900):
         self.model, self.url, self.seed, self.timeout = model, url.rstrip("/"), seed, timeout
 
     def chat(self, messages: list[dict], ledger: Ledger, think: bool = False, profile: str | None = None,
-             max_tokens: int = 2000, json_mode: bool = False, tag: str = "") -> dict:
+             max_tokens: int = 2000, json_mode: bool | dict = False, tag: str = "") -> dict:
         if ledger.n_calls >= MAX_CALLS:
             raise BudgetExceeded(f"{MAX_CALLS} calls used")
         left = ledger.remaining_tokens()
@@ -55,9 +57,11 @@ class LLM:
             raise BudgetExceeded(f"{MAX_TOKENS} tokens used")
         opts = dict(PROFILES[profile or ("thinking" if think else "precise")])
         opts.update(seed=self.seed, num_predict=min(max_tokens, left), num_ctx=16384)
-        body = {"model": self.model, "messages": messages, "stream": False, "think": think, "options": opts}
+        body = {"model": self.model, "messages": messages, "stream": False, "options": opts}
+        if think:
+            body["think"] = True
         if json_mode:
-            body["format"] = "json"  # not relied upon (known to be ignored by some builds); callers validate
+            body["format"] = json_mode if isinstance(json_mode, dict) else "json"  # JSON schema -> grammar-constrained output; callers still validate
         t0 = time.time()
         req = urllib.request.Request(self.url + "/api/chat", data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=self.timeout) as r:

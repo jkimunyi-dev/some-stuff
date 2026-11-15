@@ -7,10 +7,9 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 OUT = Path("/kaggle/working")
-MODEL = "qwen3.5:2b"
-RUNS = [  # (name, extra args)
-    ("tools_dev", ["--mode", "tools", "--split", "dev"]),
-    ("baseline_dev", ["--mode", "baseline", "--split", "dev"]),
+MODELS = ["qwen2.5:3b-instruct-q8_0", "qwen2.5:3b-instruct"]  # first that pulls wins (Q8 = higher precision, same parameter count)
+RUNS = [  # (name, extra args): real end-to-end Qwen runs only
+    ("qwen_dev", ["--split", "dev"]),
 ]
 
 
@@ -40,9 +39,6 @@ if not (EX / "sources").is_dir():
 SRC = EX / "sources"
 print(len(os.listdir(SRC)), "source files")
 
-# --- tests (no model)
-env = dict(os.environ, QA_SOURCES=str(SRC))
-r = sh(f"cd {REPO} && python -m pytest tests -q 2>&1 | tail -5", env=env)
 
 # --- ollama
 sh("apt-get -qq install -y zstd pciutils lshw > /dev/null 2>&1")
@@ -54,12 +50,13 @@ for _ in range(60):
         break
     except Exception:
         time.sleep(2)
-sh(f"ollama pull {MODEL} 2>&1 | tail -2", check=True)
+MODEL = next((m for m in MODELS if sh(f"ollama pull {m} > /tmp/pull.log 2>&1").returncode == 0), None)
+assert MODEL, "no model could be pulled"
 show = json.loads(urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:11434/api/show", data=json.dumps({"model": MODEL}).encode())).read())
 print("MODEL", show["details"], show["model_info"].get("general.parameter_count"))
 (OUT / "MODEL.json").write_text(json.dumps({"model": MODEL, "details": show["details"], "parameter_count": show["model_info"].get("general.parameter_count")}, indent=1))
 
 # --- runs
 for name, args in RUNS:
-    sh(f"cd {REPO} && python -u -m qa.run_dev --sources {SRC} --data {DATA} --model {MODEL} {' '.join(args)} --out /kaggle/working/{name}.json 2>&1 | tail -60")
+    sh(f"cd {REPO} && python -u -m qa.run_dev --sources {SRC} --data {DATA} --model {MODEL} {' '.join(args)} --out /kaggle/working/{name}.json 2>&1")
 print("done in", round(time.time() - t0), "s")
