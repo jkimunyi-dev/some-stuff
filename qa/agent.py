@@ -22,6 +22,7 @@ from .cards import guide_text, is_guide
 from .llm import LLM, BudgetExceeded, Ledger
 from .score import numbers
 from .tables import Table, clean_name, sheet_text, workbook_tables
+from .spatial_op import TASKS as SPATIAL_TASKS, SpatialError, anchor_options, run_spatial, stated_crs
 from .query import AGGS, FILTER_OPS, QueryError, json_records, profile, run_query, sheet_records, value_hits
 from .textqa import TEXT_SUFFIXES, Index
 from .tools import Ods, Recorder, Xlsx, days_between, read_table, round_half_up
@@ -44,6 +45,7 @@ OPS = {
     "table_query": "count / sum / average / min / max / distinct / duplicates over the RECORDS of a table, optionally filtered (e.g. value > 0, category = X) and grouped (e.g. per street, per type, top N)",
     "compare_keys": "compare identifier values between two files (values present in only one file, duplicates in each)",
     "area": "area of one polygon identified in the question, computed in a stated coordinate system",
+    "spatial": "distances between mapped features: how many features lie within N metres of a named feature, the nearest feature, features outside a coordinate box, overlap of two crown circles, height (Z) span of a 3D feature, invalid geometries",
     "explain": "the question asks whether the data SUPPORTS something or what a symbol/flag means (e.g. whether '[z]' entries can be treated as zero); no calculation",
     "text_answer": "the answer is stated in words in a report, guide, readme or metadata document (e.g. publisher, licence, definitions, survey findings, caveats)",
 }
@@ -55,6 +57,7 @@ EXAMPLES = """EXAMPLES (question -> operation):
 - "Average load per trip from the displayed tonne-km and trip totals?" -> ratio
 - "What were the start and end dates of record R17, and how many days apart?" -> record_lookup
 - "What is the area of polygon P-4 in hectares?" -> area
+- "How many trees lie within 20 m of tree T-9, including it?" / "Which entrance is closest to platform 2?" -> spatial
 - "How many rows have no end_date?" -> count_blank
 - "How many trees have height 0, and which genus is most common on street S?" -> table_query
 - "What is the total cost of the areas of type T, and how many records are there per category?" -> table_query
@@ -560,7 +563,7 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             kinds = {s.kind for s in ss}
             need = {"value": {"table"}, "change": {"table"}, "percent_of": {"table"}, "share": {"table"}, "ratio": {"table"},
                     "record_lookup": {"csv", "geo"}, "count_blank": {"csv", "geo"}, "compare_keys": {"csv", "geo"}, "area": {"geo"}, "explain": None,
-                    "table_query": {"csv", "geo"},
+                    "table_query": {"csv", "geo"}, "spatial": {"geo"},
                     "text_answer": None}[o["operation"]]
             if need and not kinds <= need:
                 raise Fail(f"operation {o['operation']} needs a source of kind {sorted(need)}, got {sorted(kinds)}")
@@ -744,6 +747,44 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                         facts.append(f"{_label(e, gloss)} in {p}: {v!r} (cell {a1})")
             else:
                 facts, keys = run_table_op(op, b, ss, ex, gloss)
+        elif op == "spatial":
+            geo = [x for x in pool if x.kind == "geo"]
+            gid = {x.sid: x for x in geo}
+            opts = anchor_options(question, geo) or ["(none)"]
+            cols = sorted({str(c) for x in geo for c in x.columns})
+            crs_fixed = stated_crs(context, question)
+            fsch = _enum_schema({"column": {"type": "string", "enum": [""] + cols}, "op": {"type": "string", "enum": FILTER_OPS},
+                                 "value": {"type": "string", "maxLength": 60}})
+            bs = _enum_schema({"reasoning": {"type": "string", "maxLength": 200},
+                               "task": {"type": "string", "enum": SPATIAL_TASKS},
+                               "anchor": {"type": "string", "enum": [""] + opts}, "second_anchor": {"type": "string", "enum": [""] + opts},
+                               "radius_m": {"type": "number"},
+                               "layers": {"type": "array", "items": {"type": "string", "enum": list(gid)}, "maxItems": 4},
+                               "crs": {"type": "string", "enum": list(CRS.values())},
+                               "filter": fsch, "diameter_column": {"type": "string", "enum": [""] + cols},
+                               "bbox": _enum_schema({k: {"type": "number"} for k in ("xmin", "xmax", "ymin", "ymax")})})
+            listing = "\n".join(f"{x.sid}: {x.desc}" for x in geo)
+            bm = [{"role": "system", "content": SYS},
+                  {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nLAYERS:\n{listing}\n\nFeatures named in the question "
+                                              f"(layer :: column = value): {'; '.join(opts)}\n"
+                                              + (f"Coordinate system fixed by the Context: {crs_fixed}.\n" if crs_fixed else "")
+                                              + "Pick the task, the anchor feature (and second_anchor for circle_overlap), radius_m for radius_count, "
+                                                "the layers to search (for radius_count include every layer the question says to use), an optional filter "
+                                                "for a subset the question asks about (else column ''), diameter_column for circle_overlap, bbox numbers for "
+                                                "bbox_outside (else 0). Reply as JSON."}]
+
+            def vs(o):
+                o.pop("reasoning", None)
+                if (o.get("filter") or {}).get("column", "") == "":
+                    o["filter"] = {}
+                try:
+                    run_spatial(o, gid, crs_fixed or o["crs"], Recorder())
+                except (SpatialError, KeyError, ValueError, IndexError, TypeError) as e:
+                    raise Fail(f"{type(e).__name__}: {e}")
+                return o
+            b = _ask_json(llm, led, bm, bs, "bind", vs, think=getattr(llm, "think_plan", False))
+            trace["bind"] = b
+            facts, keys = run_spatial(b, gid, crs_fixed or b["crs"], ex.rec)
         elif op == "table_query":
             s0 = ss[0]
             df = load_df(s0)
