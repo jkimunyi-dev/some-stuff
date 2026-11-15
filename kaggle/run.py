@@ -7,7 +7,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 OUT = Path("/kaggle/working")
-MODELS = ["qwen3.5:2b", "qwen2.5:3b-instruct-q8_0"]  # compared on the same items; each must be <= 3B total parameters (checked below)
+MODELS = ["qwen3.5:2b"]  # user choice; must be <= 3B total parameters (checked below)
 RUNS = [  # (name, extra args): real end-to-end Qwen runs only
     ("qwen_dev", ["--split", "dev"]),
 ]
