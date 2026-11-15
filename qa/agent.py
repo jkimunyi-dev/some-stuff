@@ -298,7 +298,9 @@ def run_record_op(op, b, srcs, ex: Exec):
                 pass
             facts.append(f"{kv}: {fcol} = {pretty}")
         ex.rec.add(f"{name}, {kc}={kv}, {' and '.join(flds)}")
-        db = b.get("days_between") or []
+        db = [x for x in (b.get("days_between") or []) if _is_date(r[x])]
+        if len(db) != 2 and b.get("want_days"):  # the question asks for days: use the chosen date fields, in the order chosen
+            db = [x for x in flds if _is_date(r[x])][:2]
         if len(db) == 2:
             a, c = (pd.to_datetime(r[x], dayfirst=not re.match(r"^\d{4}-", str(r[x]))).date().isoformat() for x in db)
             n = days_between(a, c)
@@ -323,6 +325,17 @@ def run_record_op(op, b, srcs, ex: Exec):
         keys += [str(len(only_a)), str(len(only_b))]
         ex.rec.add(f"{name}, {b['column_a']} column; {clean_name(s2.file)}, {b['column_b']}")
     return facts, keys
+
+
+def _is_date(v) -> bool:
+    v = str(v).strip()
+    if not re.match(r"^\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}", v):
+        return False
+    try:
+        pd.to_datetime(v, dayfirst=not re.match(r"^\d{4}-", v))
+        return True
+    except (ValueError, TypeError):
+        return False
 
 
 def run_area(b, s: Source, ex: Exec):
@@ -354,6 +367,21 @@ def explain_context(srcs: list[Source], all_srcs: list[Source]) -> str:
         if s.kind == "text" and is_guide(s.file):
             parts.append(f"--- {clean_name(s.file)}:\n{guide_text(s.file)[:1500]}")
     return "\n".join(parts)[:7000]
+
+
+def rank_sources(pool: list[Source], query: str, k: int) -> list[Source]:
+    import math
+    from collections import Counter
+    from .textqa import tokens
+    docs = [tokens(s.desc) for s in pool]
+    df = Counter(t for d in docs for t in set(d))
+    avg = sum(map(len, docs)) / max(1, len(docs))
+    q, N = tokens(query), len(docs)
+    def score(d):
+        tf = Counter(d)
+        return sum(math.log(1 + (N - df[t] + 0.5) / (df[t] + 0.5)) * tf[t] * 2.5 / (tf[t] + 1.5 * (0.25 + 0.75 * len(d) / avg)) for t in q if t in tf)
+    keep = sorted(range(N), key=lambda i: -score(docs[i]))[:k]
+    return [pool[i] for i in sorted(keep)]  # keep original order (and ids) among the kept
 
 
 def _one_line(s: str) -> str:
@@ -388,6 +416,9 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         pool = [s for s in srcs if s.file in named] if named else srcs  # a file named in the question restricts the choice
         if named:
             trace["named_files"] = sorted(clean_name(f) for f in named)
+        if len(pool) > 15:  # large packs: show the 15 sources most similar to the question (BM25 over descriptions)
+            pool = rank_sources(pool, f"{question} {context}", 15)
+            trace["ranked_sources"] = [s.desc[:70] for s in pool]
         by_id = {s.sid: s for s in pool}
         catalog = "\n".join(f"{s.sid}: {s.desc}" for s in pool)
         ops_txt = "\n".join(f"- {k}: {v}" for k, v in OPS.items())
@@ -424,6 +455,9 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         if tabs and any(re.search(r"[^\x00-\x7f]", x) for x in labels) and len(labels) <= 150:
             gs = _enum_schema({x: {"type": "string"} for x in labels})
             ctx_names = "; ".join(sorted({f"table '{t.title}' in file '{clean_name(t.file)}'" for t in tabs}))
+            aggs = "; ".join(f"block '{b}' is the total of {', '.join(o)}" for t in tabs for b, o in t.aggregates.items())
+            if aggs:
+                ctx_names += f" (structure found in the data: {aggs})"
             gm = [{"role": "user", "content": f"These are row/block labels from {ctx_names}. Translate each label to short English. "
                                               "Keep place names (cities, regions) unchanged. If a label is an abbreviation, expand it if the file name "
                                               "or title makes its meaning clear. Labels:\n" + "\n".join(labels) + "\nReply as JSON {label: english}."}]
@@ -451,7 +485,12 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                 t1 = ss[-1].table
                 bs = _enum_schema({"numerator": _enum_schema({"entity": {"type": "string", "enum": E}, "period": {"type": "string", "enum": P}}),
                                    "denominator": _enum_schema({"entity": {"type": "string", "enum": t1.entities}, "period": {"type": "string", "enum": t1.periods}})})
-            listing = f"TABLE {t0.id}\nTitle: {t0.title}\nUnit: {t0.unit}\nItems:\n{show(t0)}\nPeriods: {', '.join(P)}"
+            notes = [f"Block '{b}' is the TOTAL of blocks {', '.join(o)} (the whole area/group)." for b, o in t0.aggregates.items()]
+            qt = set(re.findall(r"[a-z0-9]+", question.lower()))
+            named = [e for e in E if (lambda w: w and w <= qt)(set(re.findall(r"[a-z0-9]+", re.sub(r"\[.*?\]", "", _label(e, gloss).lower()))) - {"and", "of", "the"})]
+            if named:
+                notes.append("Items whose names appear in the question: " + "; ".join(named[:10]))
+            listing = f"TABLE {t0.id}\nTitle: {t0.title}\nUnit: {t0.unit}\n" + "".join(n + "\n" for n in notes) + f"Items:\n{show(t0)}\nPeriods: {', '.join(P)}"
             if op == "ratio" and ss[-1] is not ss[0]:
                 t1 = ss[-1].table
                 listing = f"NUMERATOR {listing}\n\nDENOMINATOR TABLE {t1.id}\nTitle: {t1.title}\nUnit: {t1.unit}\nItems:\n{show(t1)}\nPeriods: {', '.join(t1.periods)}"
@@ -467,6 +506,8 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                                               "Use labels exactly as listed. Reply as JSON."}]
 
             def vb(o):
+                if "entities" in o:
+                    o["entities"] = list(dict.fromkeys(o["entities"]))
                 if op == "change" and o["period_from"] == o["period_to"]:
                     raise Fail("period_from and period_to must differ")
                 if op == "percent_of" and o["period_from"] == o["period_to"]:
@@ -524,6 +565,7 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                       {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nFILE {clean_name(s0.file)} columns: {', '.join(C)}\n{sample}\n{how} Reply as JSON."}]
 
                 def vb(o):
+                    o["want_days"] = bool(re.search(r"\bdays?\b|elapsed|how long", question, re.I))
                     for k_in, (kc, kv) in (("record", ("key_column", "key_value")), ("feature", ("id_field", "id_value"))):
                         if k_in in o:
                             o[kc], o[kv] = o.pop(k_in).split(" = ", 1)

@@ -48,6 +48,8 @@ class Table:
     periods: list[str] = field(default_factory=list)
     addr: dict = field(default_factory=dict)  # (entity, period) -> "A1"
     rows: dict = field(default_factory=dict)  # entity -> sheet row (layout A)
+    raw: dict = field(default_factory=dict)  # (entity, period) -> cell text, for structure checks
+    aggregates: dict = field(default_factory=dict)  # block -> [blocks it is the sum of]
 
     @property
     def scale(self) -> float:
@@ -175,7 +177,10 @@ def tables_from_sheet(path: Path, sheet: str, g: dict) -> list[Table]:
                 t.rows[name] = rr
                 for i, c in enumerate(run):
                     t.addr[(name, t.periods[i])] = f"{col_letter(c)}{rr}"
+                    t.raw[(name, t.periods[i])] = g.get((rr, c))
                 rr += 1
+    for t in tabs.values():
+        detect_aggregates(t)
     found += [t for t in tabs.values() if t.entities]
 
     # ---- layout B: a column holding consecutive years down the rows
@@ -208,6 +213,42 @@ def tables_from_sheet(path: Path, sheet: str, g: dict) -> list[Table]:
                 found.append(t)
             break
     return found
+
+
+def _f(x):
+    try:
+        return float(str(x).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+
+
+def detect_aggregates(t: Table) -> None:
+    """A block whose every row equals the sum of the same rows in the other blocks (in every period checked) is an
+    area/group total of those blocks, e.g. a region block summing its cities. Purely structural; recorded for the model."""
+    blocks = {}
+    for e in t.entities:
+        if " / " in e:
+            b, lab = e.split(" / ", 1)
+            blocks.setdefault(b, set()).add(lab)
+    if len(blocks) < 3:
+        return
+    periods = t.periods[-3:]
+    for b, labs in blocks.items():
+        others = [o for o in blocks if o != b]
+        hit = checked = 0
+        for lab in labs:
+            parts = [o for o in others if lab in blocks[o]]
+            if len(parts) < 2:
+                continue
+            for p in periods:
+                tot = _f(t.raw.get((f"{b} / {lab}", p)))
+                vals = [_f(t.raw.get((f"{o} / {lab}", p))) for o in parts]
+                if tot is None or any(v is None for v in vals):
+                    continue
+                checked += 1
+                hit += abs(tot - sum(vals)) <= 1e-6 * max(1.0, abs(tot))
+        if checked >= 6 and hit >= 0.8 * checked:  # published totals can carry small source quirks
+            t.aggregates[b] = others
 
 
 def workbook_tables(path: Path) -> list[Table]:
