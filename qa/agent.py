@@ -381,6 +381,7 @@ def narrow(t: Table, question: str, gloss: dict, op: str):
     """Code-side narrowing of the options offered to the model, using facts detectable in the question and the table:
     years mentioned; blocks (places) named; total rows when no component is named; for flat tables, items sharing a word."""
     E, P = list(t.entities), list(t.periods)
+    t._named_comps = []
     ql = question.lower()
     yrs = [p for p in P if re.search(rf"(?<!\d){re.escape(p[:4])}(?!\d)", question)]
     if yrs:
@@ -399,7 +400,8 @@ def narrow(t: Table, question: str, gloss: dict, op: str):
                 return True
             gw = [w[:6] for w in re.findall(r"[a-z0-9]+", (gloss.get(c) or "").lower()) if len(w) >= 4]
             return bool(gw) and all(w in qstems for w in gw)
-        comp_named = any(named_comp(c) for c in comps)
+        t._named_comps = [c for c in comps if named_comp(c)]
+        comp_named = bool(t._named_comps)
         if totals and not comp_named and op != "share":
             E = [e for e in E if e in totals] or E
     else:
@@ -510,6 +512,24 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             if missing_fmt:
                 raise Fail("the question names these formats, so choose one source of each: "
                            + "; ".join(f"{f} from {', '.join(c)}" for f, c in need_fmt))
+            if o["operation"] in ("value", "change", "percent_of", "share") and ss[0].kind == "table":
+                norm = lambda x: " ".join(re.findall(r"[a-z0-9]+", x.lower()))
+                qn = norm(question)
+                phrase = [x for x in pool if x.kind == "table" and norm(re.sub(r"\(.*?\)", "", x.table.measure or "")) and
+                          len(norm(re.sub(r"\(.*?\)", "", x.table.measure)).split()) >= 2 and norm(re.sub(r"\(.*?\)", "", x.table.measure)) in qn]
+                key = f"phrase:{ss[0].sid}"
+                if phrase and ss[0] not in phrase and key not in fit_rejected:
+                    fit_rejected.append(key)
+                    raise Fail(f"the question names the measure of {', '.join(f'{x.sid} ({x.table.measure})' for x in phrase[:4])}; "
+                               f"{ss[0].sid} measures '{ss[0].table.measure}'. Use one of those unless the question really needs {ss[0].sid}.")
+            for gword in ("point", "polygon", "line"):
+                if re.search(rf"\b{gword}s?\b", question.lower()):
+                    geo_srcs = [x for x in ss if x.kind in ("csv", "geo") and "geometr" in x.desc.lower()]
+                    good = [x for x in pool if x.kind in ("csv", "geo") and re.search(rf"\b(multi)?{gword}", x.desc.lower())]
+                    bad = [x for x in geo_srcs if not re.search(rf"\b(multi)?{gword}", x.desc.lower()) and x.kind == "csv"]
+                    if bad and good:
+                        raise Fail(f"the question mentions {gword} data but {bad[0].sid} holds other geometries; "
+                                   f"sources with {gword} geometries: {', '.join(x.sid for x in good)}")
             wa = o.get("what_is_asked", "")
             if o["operation"] == "ratio" and "denominator" not in wa.lower():  # 2. ask the two measures explicitly
                 ms = _enum_schema({"numerator": {"type": "string", "maxLength": 120}, "denominator": {"type": "string", "maxLength": 120}})
@@ -615,6 +635,18 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                 o.pop("reasoning", None)
                 if "entities" in o:
                     o["entities"] = list(dict.fromkeys(o["entities"]))
+                    if op in ("change", "value", "percent_of") and getattr(t0, "_named_comps", None):
+                        for blk in dict.fromkeys(e.split(" / ", 1)[0] for e in o["entities"] if " / " in e):
+                            for c in t0._named_comps:  # the question also asks about a named component: include its row
+                                cand = f"{blk} / {c}"
+                                if cand in t0.entities and cand not in o["entities"]:
+                                    o["entities"].append(cand)
+                if op == "share":
+                    for pr in o["pairs"]:
+                        blk = pr["part"].split(" / ", 1)[0] if " / " in pr["part"] else ""
+                        own = t0.totals.get(blk)
+                        if pr["part"] == pr["whole"] and own and pr["part"] != own:
+                            pr["whole"] = own  # a component's share is of its own block total
                 if op in ("change", "percent_of") and o["period_from"][:4] > o["period_to"][:4]:
                     o["period_from"], o["period_to"] = o["period_to"], o["period_from"]  # from = earlier/base, to = later
                 if op == "change" and o["period_from"] == o["period_to"]:
