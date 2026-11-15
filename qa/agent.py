@@ -90,7 +90,7 @@ def digest(path: Path) -> str:
                     continue
                 g = {k: (v[1] or v[0]) for k, v in o._grid(sh).items() if k[0] <= 60 and k[1] <= 70 and (v[1] or v[0]) not in (None, "")}
                 parts.append(_sheet_digest(sh, g, max_rows=34, max_cols=7))
-            return f"FILE {name}\n" + "\n".join(parts[:10])
+            return f"FILE {name}\n" + "\n".join(parts[:6])
         if is_guide(path):
             return f"GUIDE {name}\n" + guide_text(path)[:2500]
         return f"FILE {name}\n" + card_for_file(path)[:2500]
