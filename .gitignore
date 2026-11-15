@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+# large / challenge-supplied data (not tracked)
+data/SRC_*.json
+data/*.pdf
+sources/
+extracted/
+runs/
