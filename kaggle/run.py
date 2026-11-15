@@ -59,7 +59,11 @@ for MODEL in MODELS:
     show = json.loads(urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:11434/api/show", data=json.dumps({"model": MODEL}).encode())).read())
     pc = show["model_info"].get("general.parameter_count")
     print("MODEL", MODEL, show["details"], pc, show.get("capabilities"))
-    meta[MODEL] = {"details": show["details"], "parameter_count": pc, "capabilities": show.get("capabilities")}
+    tags = json.loads(urllib.request.urlopen("http://127.0.0.1:11434/api/tags").read())
+    ver = json.loads(urllib.request.urlopen("http://127.0.0.1:11434/api/version").read()).get("version")
+    digest = next((m.get("digest") for m in tags.get("models", []) if m.get("name") == MODEL), None)
+    meta[MODEL] = {"details": show["details"], "parameter_count": pc, "capabilities": show.get("capabilities"), "digest": digest, "ollama_version": ver}
+    print("DIGEST", digest, "OLLAMA", ver)
     if not pc or pc > 3_200_000_000:
         print("SKIP: over the 3B class", MODEL)
         continue

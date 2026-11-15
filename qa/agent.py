@@ -22,6 +22,7 @@ from .cards import guide_text, is_guide
 from .llm import LLM, BudgetExceeded, Ledger
 from .score import numbers
 from .tables import Table, clean_name, sheet_text, workbook_tables
+from .textqa import TEXT_SUFFIXES, Index
 from .tools import Ods, Recorder, Xlsx, days_between, read_table, round_half_up
 
 CRS = {"British National Grid (EPSG:27700)": "EPSG:27700", "WGS 84 longitude/latitude (EPSG:4326)": "EPSG:4326",
@@ -42,6 +43,7 @@ OPS = {
     "compare_keys": "compare identifier values between two files (values present in only one file, duplicates in each)",
     "area": "area of one polygon identified in the question, computed in a stated coordinate system",
     "explain": "the question asks whether the data SUPPORTS something or what a symbol/flag means (e.g. whether '[z]' entries can be treated as zero); no calculation",
+    "text_answer": "the answer is stated in words in a report, guide, readme or metadata document (e.g. publisher, licence, definitions, survey findings, caveats)",
 }
 EXAMPLES = """EXAMPLES (question -> operation):
 - "How much did X's consumption rise from 2020 to 2022, in GWh and percent?" -> change
@@ -52,7 +54,8 @@ EXAMPLES = """EXAMPLES (question -> operation):
 - "What were the start and end dates of record R17, and how many days apart?" -> record_lookup
 - "What is the area of polygon P-4 in hectares?" -> area
 - "How many rows have no end_date?" -> count_blank
-- "Can we treat the '[x]' entries as zero?" -> explain"""
+- "Can we treat the '[x]' entries as zero?" -> explain
+- "Which licence does the publisher metadata give, and who publishes it?" -> text_answer"""
 
 
 # ------------------------------------------------------------------ sources
@@ -90,11 +93,14 @@ def build_sources(files: list[Path]) -> list[Source]:
             elif suf in (".geojson", ".gpkg", ".shp", ".gml"):
                 flds, crs, n, gt = _geo_fields(f)
                 add("geo", f, f"[{name}] geographic layer of {gt or '?'} geometries, {n} features, CRS {crs or '?'}, fields: {', '.join(flds[:25])}", columns=flds)
-            elif is_guide(f) or suf in (".md", ".txt", ".pdf", ".html"):
+            elif is_guide(f) or suf in TEXT_SUFFIXES:
                 snippet = re.sub(r"\s+", " ", guide_text(f))[:300] if is_guide(f) else ""
                 add("text", f, f"[{name}] document/notes" + (f": {snippet}" if snippet else ""))
         except Exception as e:
-            add("text", f, f"[{name}] (could not be read as data: {type(e).__name__})")
+            if suf in TEXT_SUFFIXES:  # e.g. a guide whose first line contains a comma: index it as text instead
+                add("text", f, f"[{name}] document/notes")
+            else:
+                add("text", f, f"[{name}] (could not be read as data: {type(e).__name__})")
     return out
 
 
@@ -350,6 +356,22 @@ def explain_context(srcs: list[Source], all_srcs: list[Source]) -> str:
     return "\n".join(parts)[:7000]
 
 
+def _one_line(s: str) -> str:
+    return " ".join(str(s).split()).replace("|", "/")
+
+
+def format_evidence(items: list[str], facts: list[str], files: list[Path]) -> list[str]:
+    """Recorder locators -> 'SOURCE_ID | locator | supported claim' (the claim is the computed fact that used the locator)."""
+    sid = {clean_name(f): f.name.split("__")[0] for f in files}
+    out = []
+    for it in items:
+        name = it.split(",")[0].strip()
+        cell = re.search(r"cell ([A-Z]{1,3}\d+)", it)
+        claim = next((f for f in facts if cell and cell.group(1) in f), facts[0] if facts else "")
+        out.append(f"{sid.get(name, name)} | {_one_line(it)} | {_one_line(_strip_cells(claim))[:180]}")
+    return out
+
+
 # ------------------------------------------------------------------ main entry
 SYS = ("You are a careful municipal data analyst. You never invent values: you only choose among the options offered. "
        "Read the question and the Context carefully and choose exactly what they ask for.")
@@ -384,7 +406,8 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             ss = [by_id[x] for x in o["sources"]]
             kinds = {s.kind for s in ss}
             need = {"value": {"table"}, "change": {"table"}, "percent_of": {"table"}, "share": {"table"}, "ratio": {"table"},
-                    "record_lookup": {"csv", "geo"}, "count_blank": {"csv", "geo"}, "compare_keys": {"csv", "geo"}, "area": {"geo"}, "explain": None}[o["operation"]]
+                    "record_lookup": {"csv", "geo"}, "count_blank": {"csv", "geo"}, "compare_keys": {"csv", "geo"}, "area": {"geo"}, "explain": None,
+                    "text_answer": None}[o["operation"]]
             if need and not kinds <= need:
                 raise Fail(f"operation {o['operation']} needs a source of kind {sorted(need)}, got {sorted(kinds)}")
             if o["operation"] in ("record_lookup", "area") and not id_candidates(question, ss[0]):
@@ -512,13 +535,25 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                 b = _ask_json(llm, led, bm, bs, "bind", vb, think=getattr(llm, "think_plan", False))
                 trace["bind"] = b
                 facts, keys = run_area(b, s0, ex) if op == "area" else run_record_op(op, b, ss, ex)
+        # ---- retrieval for text answers and explanations
+        found = []
+        if op in ("text_answer", "explain"):
+            chosen = [s.file for s in ss if s.kind == "text"]
+            others = [s.file for s in pool if s.kind == "text" and s.file not in chosen]
+            found = Index(chosen).search(f"{question} {context}", k=6) if chosen else []
+            if len(found) < 3 and others:
+                found += Index(others).search(f"{question} {context}", k=6 - len(found))
+            trace["passages"] = [f"{clean_name(x.file)} | {x.locator}" for x in found]
         # ---- call 4: write the answer
         ctx_txt = explain_context(ss, srcs) if op == "explain" else ""
+        if found:
+            ctx_txt += "\n\nPASSAGES:\n" + "\n".join(f"[P{i + 1}] ({clean_name(x.file)}, {x.locator}) {x.text[:900]}" for i, x in enumerate(found))
         wm = [{"role": "system", "content": "You write short, exact answers for municipal briefings."},
               {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nCOMPUTED FACTS (exact; copy numbers verbatim, do not recompute or round differently):\n"
                                           + "\n".join(f"- {x}" for x in facts) + (f"\n\nSOURCE TEXT:\n{ctx_txt}" if ctx_txt else "")
                                           + "\n\nAnswer every part of the question in 1-3 plain sentences, with units. If the question asks yes/no, start with Yes or No. "
-                                            "If the data does not support what is asked, say so and why. Do not mention cells or files."}]
+                                            "If the data does not support what is asked, say so and why. Do not mention cells or files."
+                                          + (" Use only the passages; put the passage number you relied on in brackets, e.g. [P2]." if found else "")}]
         try:
             out = llm.chat(wm, led, think=False, profile="write", max_tokens=350, tag="write")
             ans = out["text"].strip()
@@ -537,6 +572,12 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         if keys and missing:
             trace["write_fallback"] = {"missing": missing, "model_answer": ans}
             ans = " ".join(_strip_cells(x) for x in facts)
-        return {"answer": ans, "evidence": ex.rec.items, "facts": facts, "trace": trace, "error": None, "ledger": led.summary()}
+        cited = [int(n) - 1 for n in re.findall(r"\[P(\d+)\]", ans) if 0 < int(n) <= len(found)] or ([0] if found else [])
+        ans = re.sub(r"\s*\[P\d+\](?:\s*,\s*\[P\d+\])*", "", ans).strip()
+        evidence = format_evidence(ex.rec.items, facts, files) + [
+            f"{found[i].src_id} | {clean_name(found[i].file)}, {found[i].locator} | {_one_line(found[i].text)[:160]}" for i in dict.fromkeys(cited)]
+        if not ans:
+            raise Fail("empty answer")
+        return {"answer": ans, "evidence": evidence, "facts": facts, "trace": trace, "error": None, "ledger": led.summary()}
     except (Fail, BudgetExceeded) as e:
         return {"answer": "", "evidence": [], "facts": [], "trace": trace, "error": f"{type(e).__name__}: {e}", "ledger": led.summary()}
