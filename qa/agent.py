@@ -374,6 +374,43 @@ def explain_context(srcs: list[Source], all_srcs: list[Source]) -> str:
     return "\n".join(parts)[:7000]
 
 
+AREA_WORDS = re.compile(r"\b(metropolitan|region|regional|area|capital|whole|combined|overall)\b", re.I)
+
+
+def narrow(t: Table, question: str, gloss: dict, op: str):
+    """Code-side narrowing of the options offered to the model, using facts detectable in the question and the table:
+    years mentioned; blocks (places) named; total rows when no component is named; for flat tables, items sharing a word."""
+    E, P = list(t.entities), list(t.periods)
+    ql = question.lower()
+    yrs = [p for p in P if re.search(rf"(?<!\d){re.escape(p[:4])}(?!\d)", question)]
+    if yrs:
+        P = yrs
+    blocks = list(dict.fromkeys(e.split(" / ", 1)[0] for e in E if " / " in e))
+    if blocks:
+        named_b = [b for b in blocks if re.search(rf"(?<!\w){re.escape(b.lower())}(?!\w)", ql)]
+        if named_b:
+            keep = set(named_b) | (set(t.aggregates) if AREA_WORDS.search(question) else set())
+            E = [e for e in E if e.split(" / ", 1)[0] in keep]
+        totals = set(t.totals.values())
+        comps = {e.split(" / ", 1)[1] for e in E if " / " in e and e not in totals}
+        qstems = {w[:6] for w in re.findall(r"[a-z0-9]+", ql) if len(w) >= 4}
+        def named_comp(c):  # the label itself, or every (stemmed) word of its English gloss, appears in the question
+            if re.search(rf"(?<!\w){re.escape(c.lower())}(?!\w)", ql):
+                return True
+            gw = [w[:6] for w in re.findall(r"[a-z0-9]+", (gloss.get(c) or "").lower()) if len(w) >= 4]
+            return bool(gw) and all(w in qstems for w in gw)
+        comp_named = any(named_comp(c) for c in comps)
+        if totals and not comp_named and op != "share":
+            E = [e for e in E if e in totals] or E
+    else:
+        words = lambda e: set(re.findall(r"[a-z0-9]+", re.sub(r"\[.*?\]", "", e.lower()))) - {"and", "of", "the", "with", "or"}
+        qt = set(re.findall(r"[a-z0-9]+", ql))
+        cand = [e for e in E if words(e) & qt]
+        if cand:
+            E = cand
+    return E, P
+
+
 def table_fit(s: Source, query: str) -> float:
     """How well a table's measure line ('Passenger journeys (millions)') matches the query: matched words minus half the
     unmatched ones, on 6-letter stems. Short measure lines discriminate; long titles do not."""
@@ -466,10 +503,13 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                     "text_answer": None}[o["operation"]]
             if need and not kinds <= need:
                 raise Fail(f"operation {o['operation']} needs a source of kind {sorted(need)}, got {sorted(kinds)}")
-            for word, fmt in (("geopackage", "GeoPackage"), ("geojson", "GeoJSON"), ("shapefile", "Shapefile"), ("csv", "CSV")):
-                has = [x for x in pool if f"] {fmt}" in x.desc]
-                if word in question.lower() and has and not any(f"] {fmt}" in x.desc for x in ss):
-                    raise Fail(f"the question mentions a {fmt}; choose among: {', '.join(x.sid for x in has)}")
+            need_fmt = [(fmt, [x.sid for x in pool if f"] {fmt}" in x.desc]) for word, fmt in
+                        (("geopackage", "GeoPackage"), ("geojson", "GeoJSON"), ("shapefile", "Shapefile"), ("csv", "CSV"))
+                        if word in question.lower() and any(f"] {fmt}" in x.desc for x in pool)]
+            missing_fmt = [(f, c) for f, c in need_fmt if not any(f"] {f}" in x.desc for x in ss)]
+            if missing_fmt:
+                raise Fail("the question names these formats, so choose one source of each: "
+                           + "; ".join(f"{f} from {', '.join(c)}" for f, c in need_fmt))
             wa = o.get("what_is_asked", "")
             if o["operation"] == "ratio" and "denominator" not in wa.lower():  # 2. ask the two measures explicitly
                 ms = _enum_schema({"numerator": {"type": "string", "maxLength": 120}, "denominator": {"type": "string", "maxLength": 120}})
@@ -522,7 +562,8 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         if op in ("value", "change", "percent_of", "share", "ratio", "explain") and tabs:
             t0 = ss[0].table
             show = lambda t: "\n".join(f"  {e}" + (f"   (= {_label(e, gloss)})" if gloss and _label(e, gloss) != e else "") for e in t.entities)
-            E, P = t0.entities, t0.periods
+            E, P = narrow(t0, question, gloss, op)
+            trace["narrowed"] = {"items": len(E), "of": len(t0.entities), "periods": P if len(P) <= 6 else len(P)}
             R = {"reasoning": {"type": "string", "maxLength": 200, "description": "one short sentence naming the items and periods the question asks for"}}
             if op == "value" or op == "explain":
                 bs = _enum_schema({**R, "entities": {"type": "array", "items": {"type": "string", "enum": E}, "minItems": 1, "maxItems": 8},
@@ -535,8 +576,9 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                                    "period": {"type": "string", "enum": P}})
             else:  # ratio
                 t1 = ss[-1].table
+                E1, P1 = narrow(t1, question, gloss, op)
                 bs = _enum_schema({**R, "numerator": _enum_schema({"entity": {"type": "string", "enum": E}, "period": {"type": "string", "enum": P}}),
-                                   "denominator": _enum_schema({"entity": {"type": "string", "enum": t1.entities}, "period": {"type": "string", "enum": t1.periods}})})
+                                   "denominator": _enum_schema({"entity": {"type": "string", "enum": E1}, "period": {"type": "string", "enum": P1}})})
             notes = [f"Block '{b}' is the TOTAL of blocks {', '.join(o)} (the whole area/group)." for b, o in t0.aggregates.items()]
             if t0.totals:
                 notes.append("Total row of each block: " + "; ".join(t0.totals.values()))
@@ -548,10 +590,12 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             named = [e for e in E if _w(e) and (_w(e) <= qt or len(_w(e) & qt) >= 2)]
             if named:
                 notes.append("Items whose names appear in the question: " + "; ".join(named[:10]))
-            listing = f"TABLE {t0.id}\nTitle: {t0.title}\nUnit: {t0.unit}\n" + "".join(n + "\n" for n in notes) + f"Items:\n{show(t0)}\nPeriods: {', '.join(P)}"
+            show = lambda t, ents=None: "\n".join(f"  {e}" + (f"   (= {_label(e, gloss)})" if gloss and _label(e, gloss) != e else "") for e in (ents or t.entities))
+            listing = f"TABLE {t0.id}\nTitle: {t0.title}\nUnit: {t0.unit}\n" + "".join(n + "\n" for n in notes) + f"Items:\n{show(t0, E)}\nPeriods: {', '.join(P)}"
             if op == "ratio" and ss[-1] is not ss[0]:
                 t1 = ss[-1].table
-                listing = f"NUMERATOR {listing}\n\nDENOMINATOR TABLE {t1.id}\nTitle: {t1.title}\nUnit: {t1.unit}\nItems:\n{show(t1)}\nPeriods: {', '.join(t1.periods)}"
+                E1, P1 = narrow(t1, question, gloss, op)
+                listing = f"NUMERATOR {listing}\n\nDENOMINATOR TABLE {t1.id}\nTitle: {t1.title}\nUnit: {t1.unit}\nItems:\n{show(t1, E1)}\nPeriods: {', '.join(P1)}"
             how = {"value": "Pick the item(s) and period(s) the question asks about.",
                    "explain": "Pick the item(s) and period(s) whose values the question is about.",
                    "change": "Pick every item the question compares, and the start (period_from) and end (period_to) periods.",
@@ -571,6 +615,8 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                 o.pop("reasoning", None)
                 if "entities" in o:
                     o["entities"] = list(dict.fromkeys(o["entities"]))
+                if op in ("change", "percent_of") and o["period_from"][:4] > o["period_to"][:4]:
+                    o["period_from"], o["period_to"] = o["period_to"], o["period_from"]  # from = earlier/base, to = later
                 if op == "change" and o["period_from"] == o["period_to"]:
                     raise Fail("period_from and period_to must differ")
                 if op == "percent_of" and o["period_from"] == o["period_to"]:
