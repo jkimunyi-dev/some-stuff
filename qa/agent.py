@@ -466,7 +466,21 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                     "text_answer": None}[o["operation"]]
             if need and not kinds <= need:
                 raise Fail(f"operation {o['operation']} needs a source of kind {sorted(need)}, got {sorted(kinds)}")
+            for word, fmt in (("geopackage", "GeoPackage"), ("geojson", "GeoJSON"), ("shapefile", "Shapefile"), ("csv", "CSV")):
+                has = [x for x in pool if f"] {fmt}" in x.desc]
+                if word in question.lower() and has and not any(f"] {fmt}" in x.desc for x in ss):
+                    raise Fail(f"the question mentions a {fmt}; choose among: {', '.join(x.sid for x in has)}")
             wa = o.get("what_is_asked", "")
+            if o["operation"] == "ratio" and "denominator" not in wa.lower():  # 2. ask the two measures explicitly
+                ms = _enum_schema({"numerator": {"type": "string", "maxLength": 120}, "denominator": {"type": "string", "maxLength": 120}})
+                mm = [{"role": "user", "content": f"QUESTION: {question}\nThis needs one quantity divided by another. Name the measure of the "
+                                                  "numerator and of the denominator in a few words each. Reply as JSON."}]
+                try:
+                    r = _ask_json(llm, led, mm, ms, "measures", lambda x: x, tries=1, max_tokens=120)
+                    wa = f"numerator: {r['numerator']}; denominator: {r['denominator']}"
+                    o["what_is_asked"] = wa
+                except Fail:
+                    pass
             if o["operation"] == "ratio" and "denominator" in wa.lower():  # fit check only on the model's own ratio sides
                 num, den = re.split(r"denominator", wa, flags=re.I, maxsplit=1)
                 sides = [num, den]
@@ -483,7 +497,7 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             return o
         plan = _ask_json(llm, led, msg, sch, "plan", v1, think=getattr(llm, "think_plan", False))
         op, ss = plan["operation"], [by_id[x] for x in plan["sources"]]
-        trace["plan"] = {"op": op, "sources": [s.desc[:90] for s in ss]}
+        trace["plan"] = {"op": op, "sources": [s.desc[:90] for s in ss], "what_is_asked": plan.get("what_is_asked", "")}
         ex = Exec(context)
         gloss: dict = {}
         # ---- call 2: gloss non-English labels of chosen tables
@@ -526,8 +540,8 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             notes = [f"Block '{b}' is the TOTAL of blocks {', '.join(o)} (the whole area/group)." for b, o in t0.aggregates.items()]
             if t0.totals:
                 notes.append("Total row of each block: " + "; ".join(t0.totals.values()))
-                if re.search(r"\btotal\b", question, re.I):
-                    notes.append("The question asks about TOTAL consumption/values: use these total rows, not a single component row.")
+                notes.append("Unless the question names a specific component (e.g. one sector, fuel or category), a place's consumption/value "
+                             "means its TOTAL row, not a component row.")
             qt = set(re.findall(r"[a-z0-9]+", question.lower()))
             def _w(e):
                 return set(re.findall(r"[a-z0-9]+", re.sub(r"\[.*?\]", "", _label(e, gloss).lower()))) - {"and", "of", "the"}
