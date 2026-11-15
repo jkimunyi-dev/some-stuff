@@ -124,15 +124,29 @@ def main():
             fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
             fh.flush()
             print(f"[{len(done)}/{len(order)}] {r.ID[:8]} {r.Domain} op={row['op']} {res['ledger']} err={res['error']} ({time.time() - t0:.0f}s)", flush=True)
+            if len(done) % 25 == 0:
+                prog.update(list(done.values()), len(order))
 
+    from .agent import clear_caches
+    from .progress import Progress, token_from_env_or_kaggle
+    prog = Progress(token_from_env_or_kaggle(), label=f"submit {a.model}")
+    prog.update(list(done.values()), len(order), note="started")
+    packs: dict = {}
+    for r in todo:  # pack by pack: sources load once per pack and memory is freed before the next pack
+        packs.setdefault(r.Source_IDs, []).append(r)
     with ck.open("a", encoding="utf-8") as fh:
-        with ThreadPoolExecutor(max(1, a.workers)) as pool:
-            list(pool.map(one, todo))
+        for i, (k, rs) in enumerate(packs.items(), 1):
+            with ThreadPoolExecutor(max(1, a.workers)) as pool:
+                list(pool.map(one, rs))
+            clear_caches()
+            prog.update(list(done.values()), len(order), note=f"pack {i}/{len(packs)} done")
+            print(f"--- pack {i}/{len(packs)} done ({len(rs)} questions); {len(done)}/{len(order)} answered so far", flush=True)
     rows = list(done.values())
     md = render(rows, order)
     errs = validate(md, order)
     Path(a.out).write_text(md, encoding="utf-8")
     rep = audit(rows)
+    prog.update(rows, len(order), note="finished")
     rep["unanswered_or_fallback"] = sum(1 for q in order if not (done.get(q) or {}).get("answer"))
     rep["format_errors"] = errs[:20]
     print(json.dumps(rep, indent=1))

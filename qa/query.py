@@ -75,6 +75,9 @@ def to_num(s: pd.Series) -> pd.Series:
 
 def profile(df: pd.DataFrame, max_cols: int = 40) -> str:
     lines = [f"{len(df)} records"]
+    if len(df) > 300_000:  # profile a sample of huge tables (min/max/top values are indicative only)
+        df = df.sample(300_000, random_state=0)
+        lines[0] += " (column profile from a 300,000-record sample)"
     for c in list(df.columns)[:max_cols]:
         s = df[c]
         blank = int(is_blank_series(s).sum())
@@ -92,10 +95,16 @@ def profile(df: pd.DataFrame, max_cols: int = 40) -> str:
 def value_hits(df: pd.DataFrame, question: str, limit: int = 12) -> list[str]:
     """'column = value' for values that appear verbatim (whole token) in the question."""
     out, q = [], question
+    toks = set(re.findall(r"[^\s,;:()?\"']{3,}", q))
     for c in df.columns:
-        if len(df) > 1_000_000 and df[c].dtype.kind in "fiub":  # huge numeric columns (e.g. point clouds): no verbatim ids there
+        if df[c].dtype.kind in "fiub" and len(df) > 200_000:  # huge numeric columns (e.g. point clouds): no verbatim ids there
             continue
-        vals = set(df[c].dropna().astype(str).str.strip())
+        col = df[c].dropna().astype(str).str.strip()
+        if len(col) > 200_000:  # huge text columns: only test question tokens for membership (fast) instead of scanning values
+            hit = col[col.isin(toks)].unique()[:20]
+            out += [f"{c} = {v}" for v in hit]
+            continue
+        vals = set(col)
         if len(vals) > 200_000:
             continue
         for v in vals:

@@ -118,14 +118,14 @@ def las_table(path: Path) -> tuple[pd.DataFrame, str]:
     import numpy as np
     las = laspy.read(path)
     h = las.header
-    df = pd.DataFrame({"X": np.asarray(las.x), "Y": np.asarray(las.y), "Z": np.asarray(las.z),
-                       "classification": np.asarray(las.classification).astype(int),
-                       "return_number": np.asarray(las.return_number).astype(int),
-                       "number_of_returns": np.asarray(las.number_of_returns).astype(int),
-                       "intensity": np.asarray(las.intensity).astype(int)})
+    df = pd.DataFrame({"X": np.asarray(las.x), "Y": np.asarray(las.y), "Z": np.asarray(las.z, dtype="float32"),
+                       "classification": np.asarray(las.classification).astype("uint8"),
+                       "return_number": np.asarray(las.return_number).astype("uint8"),
+                       "number_of_returns": np.asarray(las.number_of_returns).astype("uint8"),
+                       "intensity": np.asarray(las.intensity).astype("uint16")})
     for flag in ("withheld", "synthetic", "key_point", "overlap"):
         try:
-            df[flag] = np.asarray(getattr(las, flag)).astype(int)
+            df[flag] = np.asarray(getattr(las, flag)).astype("uint8")
         except Exception:
             pass
     facts = (f"point records {h.point_count}; x {h.mins[0]:.3f}..{h.maxs[0]:.3f}; y {h.mins[1]:.3f}..{h.maxs[1]:.3f}; "

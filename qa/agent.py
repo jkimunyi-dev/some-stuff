@@ -99,6 +99,15 @@ _SRC_CACHE: dict = {}
 _IDX_CACHE: dict = {}
 
 
+def clear_caches() -> None:
+    """Free every per-pack cache (record tables, point clouds, layers, feeds, indexes). Called between packs."""
+    import gc
+    from . import spatial_op, transit_op
+    for c in (_DF_CACHE, _SRC_CACHE, _IDX_CACHE, spatial_op._LAYERS, transit_op._FEEDS):
+        c.clear()
+    gc.collect()
+
+
 def text_index(files: list[Path]) -> Index:
     key = tuple(sorted(map(str, files)))
     if key not in _IDX_CACHE:  # one index per pack, reused by every question of that pack
@@ -174,7 +183,7 @@ def _build_sources(files: list[Path]) -> list[Source]:
                               "intensity, withheld, synthetic, key_point, overlap",
                     columns=["X", "Y", "Z", "classification", "return_number", "number_of_returns", "intensity", "withheld", "synthetic", "key_point", "overlap"],
                     fmt="las")
-            elif suf == ".json" and f.stat().st_size < 200_000_000:
+            elif suf == ".json" and f.stat().st_size < 60_000_000:
                 try:
                     df, jp = json_records(f)
                 except Exception:
@@ -260,8 +269,13 @@ def load_df(s: Source) -> pd.DataFrame:
 def id_candidates(question: str, s: Source, limit: int = 15) -> list[str]:
     """'column = value' pairs whose value occurs verbatim (as a whole token) in the question. Code finds them; the model picks."""
     df, q, out = load_df(s), question, []
+    toks = set(re.findall(r"[^\s,;:()?\"']{3,}", q))
     for c in df.columns:
-        for v in set(df[c].dropna().astype(str).str.strip()):
+        col = df[c].dropna().astype(str).str.strip() if not (df[c].dtype.kind in "fiub" and len(df) > 200_000) else None
+        if col is None:
+            continue
+        cand = col[col.isin(toks)].unique() if len(col) > 200_000 else set(col)
+        for v in cand:
             if len(v) < 3 or v not in q or not re.search(r"\d", v):
                 continue
             i = q.find(v)

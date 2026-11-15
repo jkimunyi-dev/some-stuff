@@ -67,7 +67,10 @@ def main():
     rows = []
     def one(it):
         t0 = time.time()
-        r = answer(llm, it["question"], it["context"], it["files"])
+        try:
+            r = answer(llm, it["question"], it["context"], it["files"])
+        except Exception as e:  # one failing question must never end the run
+            r = {"answer": "", "evidence": [], "facts": [], "trace": {}, "error": f"crash: {type(e).__name__}: {e}", "ledger": {"calls": 0, "tokens": 0, "seconds": 0}}
         row = dict(id=it["id"], domain=it["domain"], question=it["question"], reference=it["reference"], evidence_ref=it["evidence_ref"],
                    pack=[clean_name(f) for f in it["files"]], answer=r["answer"], evidence=r["evidence"], facts=r["facts"],
                    trace=r["trace"], error=r["error"], ledger=r["ledger"])
