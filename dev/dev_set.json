@@ -1,0 +1,563 @@
+[
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in the Helsinki metropolitan area change from 2023 to 2024, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in the Helsinki metropolitan area changed by 1,964.06 GWh, or 8.07%, from 2023 to 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells Z9 and AA9"
+  ],
+  "id": "dev-000",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in the Helsinki metropolitan area change from 2019 to 2024, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in the Helsinki metropolitan area changed by 994.93 GWh, or 3.93%, from 2019 to 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells V9 and AA9"
+  ],
+  "id": "dev-001",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in the Helsinki metropolitan area change from 2000 to 2010, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in the Helsinki metropolitan area changed by 3,091.34 GWh, or 13.93%, from 2000 to 2010.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells C9 and M9"
+  ],
+  "id": "dev-002",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "What share of the Helsinki metropolitan area's total energy use in 2000 was residential (Asuminen)?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Residential energy use was 49.59% of the Helsinki metropolitan area's total in 2000.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells C11 and C9"
+  ],
+  "id": "dev-003",
+  "split": "holdout"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "What share of the Helsinki metropolitan area's total energy use in 2024 was residential (Asuminen)?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Residential energy use was 47.17% of the Helsinki metropolitan area's total in 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells AA11 and AA9"
+  ],
+  "id": "dev-004",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in Helsinki change from 2023 to 2024, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in Helsinki changed by 1,424.36 GWh, or 10.75%, from 2023 to 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells Z22 and AA22"
+  ],
+  "id": "dev-005",
+  "split": "holdout"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in Helsinki change from 2019 to 2024, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in Helsinki changed by 784.26 GWh, or 5.65%, from 2019 to 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells V22 and AA22"
+  ],
+  "id": "dev-006",
+  "split": "holdout"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in Helsinki change from 2000 to 2010, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in Helsinki changed by 1,327.95 GWh, or 10.27%, from 2000 to 2010.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells C22 and M22"
+  ],
+  "id": "dev-007",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "What share of Helsinki's total energy use in 2000 was residential (Asuminen)?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Residential energy use was 48.96% of Helsinki's total in 2000.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells C24 and C22"
+  ],
+  "id": "dev-008",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "What share of Helsinki's total energy use in 2024 was residential (Asuminen)?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Residential energy use was 45.45% of Helsinki's total in 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells AA24 and AA22"
+  ],
+  "id": "dev-009",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in Espoo change from 2023 to 2024, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in Espoo changed by 444.64 GWh, or 8.09%, from 2023 to 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells Z35 and AA35"
+  ],
+  "id": "dev-010",
+  "split": "holdout"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in Espoo change from 2019 to 2024, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in Espoo changed by 294.75 GWh, or 5.22%, from 2019 to 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells V35 and AA35"
+  ],
+  "id": "dev-011",
+  "split": "holdout"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in Espoo change from 2000 to 2010, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in Espoo changed by 947.76 GWh, or 21.00%, from 2000 to 2010.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells C35 and M35"
+  ],
+  "id": "dev-012",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "What share of Espoo's total energy use in 2000 was residential (Asuminen)?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Residential energy use was 54.36% of Espoo's total in 2000.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells C37 and C35"
+  ],
+  "id": "dev-013",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "What share of Espoo's total energy use in 2024 was residential (Asuminen)?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Residential energy use was 51.09% of Espoo's total in 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells AA37 and AA35"
+  ],
+  "id": "dev-014",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in Vantaa change from 2023 to 2024, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in Vantaa changed by 93.53 GWh, or 1.73%, from 2023 to 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells Z48 and AA48"
+  ],
+  "id": "dev-015",
+  "split": "holdout"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in Vantaa change from 2019 to 2024, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in Vantaa changed by -69.69 GWh, or -1.25%, from 2019 to 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells V48 and AA48"
+  ],
+  "id": "dev-016",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in Vantaa change from 2000 to 2010, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in Vantaa changed by 782.89 GWh, or 17.08%, from 2000 to 2010.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells C48 and M48"
+  ],
+  "id": "dev-017",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "What share of Vantaa's total energy use in 2000 was residential (Asuminen)?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Residential energy use was 46.07% of Vantaa's total in 2000.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells C50 and C48"
+  ],
+  "id": "dev-018",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "What share of Vantaa's total energy use in 2024 was residential (Asuminen)?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Residential energy use was 46.88% of Vantaa's total in 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells AA50 and AA48"
+  ],
+  "id": "dev-019",
+  "split": "holdout"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in Kauniainen change from 2023 to 2024, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in Kauniainen changed by 2.34 GWh, or 1.32%, from 2023 to 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells Z61 and AA61"
+  ],
+  "id": "dev-020",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in Kauniainen change from 2019 to 2024, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in Kauniainen changed by -13.58 GWh, or -7.03%, from 2019 to 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells V61 and AA61"
+  ],
+  "id": "dev-021",
+  "split": "holdout"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "For the briefing, how much did total energy consumption in Kauniainen change from 2000 to 2010, in GWh and percent?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Total energy consumption in Kauniainen changed by 32.73 GWh, or 19.08%, from 2000 to 2010.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells C61 and M61"
+  ],
+  "id": "dev-022",
+  "split": "holdout"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "What share of Kauniainen's total energy use in 2000 was residential (Asuminen)?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Residential energy use was 65.62% of Kauniainen's total in 2000.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells C63 and C61"
+  ],
+  "id": "dev-023",
+  "split": "dev"
+ },
+ {
+  "domain": "buildings_energy",
+  "question": "What share of Kauniainen's total energy use in 2024 was residential (Asuminen)?",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "answer": "Residential energy use was 66.78% of Kauniainen's total in 2024.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, cells AA63 and AA61"
+  ],
+  "id": "dev-024",
+  "split": "holdout"
+ },
+ {
+  "domain": "buildings_energy",
+  "context": "Use the stored numeric cell values, including their decimal precision; the workbook's display format rounds them to whole GWh. Keep intermediate calculations unrounded. Report GWh values and percentages to two decimal places unless the question specifies otherwise.",
+  "question": "Which of Helsinki, Espoo and Vantaa had the largest GWh increase in total energy consumption from 2023 to 2024, and by how much?",
+  "answer": "Helsinki had the largest increase, 1,424.36 GWh.",
+  "evidence": [
+   "Paakaupunkiseudun_energiankulutus_1990_ja_2000-2024.xlsx, sheet Tulokset, total rows for each city, columns Z and AA"
+  ],
+  "id": "dev-025",
+  "split": "dev"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Use the supplied frozen Liverpool tree-preservation files, selecting the exact named file and its recorded fields. Different formats must not be assumed to be row-for-row copies. Preserve source references, versions, nulls and geometry; do not replace the supplied records with a live register.",
+  "question": "I'm checking TPO401 in trees-dataset-2026-06-23.csv. What were its made and confirmed dates, and how many calendar days elapsed between them, excluding the starting day?",
+  "answer": "TPO401 was made on 27 May 2011 and confirmed on 12 August 2011. The elapsed time was 77 calendar days, excluding the starting day.",
+  "evidence": [
+   "trees-dataset-2026-06-23.csv, reference=TPO401, made_date and confirmed_date"
+  ],
+  "id": "dev-026",
+  "split": "holdout"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Use the supplied frozen Liverpool tree-preservation files, selecting the exact named file and its recorded fields. Different formats must not be assumed to be row-for-row copies. Preserve source references, versions, nulls and geometry; do not replace the supplied records with a live register.",
+  "question": "I'm checking TPO208 in trees-dataset-2026-06-23.csv. What were its made and confirmed dates, and how many calendar days elapsed between them, excluding the starting day?",
+  "answer": "TPO208 was made on 23 February 1988 and confirmed on 25 April 1988. The elapsed time was 62 calendar days, excluding the starting day.",
+  "evidence": [
+   "trees-dataset-2026-06-23.csv, reference=TPO208, made_date and confirmed_date"
+  ],
+  "id": "dev-027",
+  "split": "dev"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Use the supplied frozen Liverpool tree-preservation files, selecting the exact named file and its recorded fields. Different formats must not be assumed to be row-for-row copies. Preserve source references, versions, nulls and geometry; do not replace the supplied records with a live register.",
+  "question": "I'm checking TPO433 in trees-dataset-2026-06-23.csv. What were its made and confirmed dates, and how many calendar days elapsed between them, excluding the starting day?",
+  "answer": "TPO433 was made on 23 September 2016 and confirmed on 18 November 2016. The elapsed time was 56 calendar days, excluding the starting day.",
+  "evidence": [
+   "trees-dataset-2026-06-23.csv, reference=TPO433, made_date and confirmed_date"
+  ],
+  "id": "dev-028",
+  "split": "dev"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Use the supplied frozen Liverpool tree-preservation files, selecting the exact named file and its recorded fields. Different formats must not be assumed to be row-for-row copies. Preserve source references, versions, nulls and geometry; do not replace the supplied records with a live register.",
+  "question": "I'm checking TPO260 in trees-dataset-2026-06-23.csv. What were its made and confirmed dates, and how many calendar days elapsed between them, excluding the starting day?",
+  "answer": "TPO260 was made on 3 June 1994 and confirmed on 2 August 1994. The elapsed time was 60 calendar days, excluding the starting day.",
+  "evidence": [
+   "trees-dataset-2026-06-23.csv, reference=TPO260, made_date and confirmed_date"
+  ],
+  "id": "dev-029",
+  "split": "holdout"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Use the supplied frozen Liverpool tree-preservation files, selecting the exact named file and its recorded fields. Different formats must not be assumed to be row-for-row copies. Preserve source references, versions, nulls and geometry; do not replace the supplied records with a live register.",
+  "question": "I'm checking TPO450 in trees-dataset-2026-06-23.csv. What were its made and confirmed dates, and how many calendar days elapsed between them, excluding the starting day?",
+  "answer": "TPO450 was made on 23 March 2018 and confirmed on 19 June 2018. The elapsed time was 88 calendar days, excluding the starting day.",
+  "evidence": [
+   "trees-dataset-2026-06-23.csv, reference=TPO450, made_date and confirmed_date"
+  ],
+  "id": "dev-030",
+  "split": "dev"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Use the supplied frozen Liverpool tree-preservation files, selecting the exact named file and its recorded fields. Different formats must not be assumed to be row-for-row copies. Preserve source references, versions, nulls and geometry; do not replace the supplied records with a live register.",
+  "question": "I'm checking TPO443 in trees-dataset-2026-06-23.csv. What were its made and confirmed dates, and how many calendar days elapsed between them, excluding the starting day?",
+  "answer": "TPO443 was made on 16 June 2017 and confirmed on 4 August 2017. The elapsed time was 49 calendar days, excluding the starting day.",
+  "evidence": [
+   "trees-dataset-2026-06-23.csv, reference=TPO443, made_date and confirmed_date"
+  ],
+  "id": "dev-031",
+  "split": "dev"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Use the supplied frozen Liverpool tree-preservation files, selecting the exact named file and its recorded fields. Different formats must not be assumed to be row-for-row copies. Preserve source references, versions, nulls and geometry; do not replace the supplied records with a live register.",
+  "question": "I'm checking TPO210 in trees-dataset-2026-06-23.csv. What were its made and confirmed dates, and how many calendar days elapsed between them, excluding the starting day?",
+  "answer": "TPO210 was made on 26 August 1988 and confirmed on 14 November 1988. The elapsed time was 80 calendar days, excluding the starting day.",
+  "evidence": [
+   "trees-dataset-2026-06-23.csv, reference=TPO210, made_date and confirmed_date"
+  ],
+  "id": "dev-032",
+  "split": "holdout"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Use the supplied frozen Liverpool tree-preservation files, selecting the exact named file and its recorded fields. Different formats must not be assumed to be row-for-row copies. Preserve source references, versions, nulls and geometry; do not replace the supplied records with a live register.",
+  "question": "I'm checking TPO011 in trees-dataset-2026-06-23.csv. What were its made and confirmed dates, and how many calendar days elapsed between them, excluding the starting day?",
+  "answer": "TPO011 was made on 6 September 1968 and confirmed on 4 March 1969. The elapsed time was 179 calendar days, excluding the starting day.",
+  "evidence": [
+   "trees-dataset-2026-06-23.csv, reference=TPO011, made_date and confirmed_date"
+  ],
+  "id": "dev-033",
+  "split": "dev"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Use the supplied frozen Liverpool tree-preservation files, selecting the exact named file and its recorded fields. Different formats must not be assumed to be row-for-row copies. Preserve source references, versions, nulls and geometry; do not replace the supplied records with a live register.",
+  "question": "In trees-dataset-2026-06-23.csv, how many orders have no confirmed_date, and how many records are there in total?",
+  "answer": "15 of 450 records have a blank confirmed_date.",
+  "evidence": [
+   "trees-dataset-2026-06-23.csv, confirmed_date column"
+  ],
+  "id": "dev-034",
+  "split": "dev"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Organiser-authored budget request; calculate the valid published polygon without repairing or replacing its boundary.",
+  "question": "For an early budget estimate, give the area of Liverpool zone 1427/G1 in hectares, rounded to two decimal places. Use its actual published geometry in zones-2026-06-23.geojson, calculate in British National Grid metres, and do not repair or replace the boundary.",
+  "answer": "Zone 1427/G1 has an area of 0.03 hectares, calculated from its published geometry in British National Grid metres.",
+  "evidence": [
+   "zones-2026-06-23.geojson, properties.reference=1427/G1"
+  ],
+  "id": "dev-035",
+  "split": "holdout"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Organiser-authored budget request; calculate the valid published polygon without repairing or replacing its boundary.",
+  "question": "For an early budget estimate, give the area of Liverpool zone 1527/G9 in hectares, rounded to two decimal places. Use its actual published geometry in zones-2026-06-23.geojson, calculate in British National Grid metres, and do not repair or replace the boundary.",
+  "answer": "Zone 1527/G9 has an area of 0.04 hectares, calculated from its published geometry in British National Grid metres.",
+  "evidence": [
+   "zones-2026-06-23.geojson, properties.reference=1527/G9"
+  ],
+  "id": "dev-036",
+  "split": "dev"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Organiser-authored budget request; calculate the valid published polygon without repairing or replacing its boundary.",
+  "question": "For an early budget estimate, give the area of Liverpool zone 1645/G12 in hectares, rounded to two decimal places. Use its actual published geometry in zones-2026-06-23.geojson, calculate in British National Grid metres, and do not repair or replace the boundary.",
+  "answer": "Zone 1645/G12 has an area of 0.01 hectares, calculated from its published geometry in British National Grid metres.",
+  "evidence": [
+   "zones-2026-06-23.geojson, properties.reference=1645/G12"
+  ],
+  "id": "dev-037",
+  "split": "dev"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Organiser-authored budget request; calculate the valid published polygon without repairing or replacing its boundary.",
+  "question": "For an early budget estimate, give the area of Liverpool zone 1739/G5 in hectares, rounded to two decimal places. Use its actual published geometry in zones-2026-06-23.geojson, calculate in British National Grid metres, and do not repair or replace the boundary.",
+  "answer": "Zone 1739/G5 has an area of 0.00 hectares, calculated from its published geometry in British National Grid metres.",
+  "evidence": [
+   "zones-2026-06-23.geojson, properties.reference=1739/G5"
+  ],
+  "id": "dev-038",
+  "split": "holdout"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Organiser-authored budget request; calculate the valid published polygon without repairing or replacing its boundary.",
+  "question": "For an early budget estimate, give the area of Liverpool zone 1833/G31 in hectares, rounded to two decimal places. Use its actual published geometry in zones-2026-06-23.geojson, calculate in British National Grid metres, and do not repair or replace the boundary.",
+  "answer": "Zone 1833/G31 has an area of 0.04 hectares, calculated from its published geometry in British National Grid metres.",
+  "evidence": [
+   "zones-2026-06-23.geojson, properties.reference=1833/G31"
+  ],
+  "id": "dev-039",
+  "split": "dev"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Organiser-authored budget request; calculate the valid published polygon without repairing or replacing its boundary.",
+  "question": "For an early budget estimate, give the area of Liverpool zone 1930/A1 in hectares, rounded to two decimal places. Use its actual published geometry in zones-2026-06-23.geojson, calculate in British National Grid metres, and do not repair or replace the boundary.",
+  "answer": "Zone 1930/A1 has an area of 0.28 hectares, calculated from its published geometry in British National Grid metres.",
+  "evidence": [
+   "zones-2026-06-23.geojson, properties.reference=1930/A1"
+  ],
+  "id": "dev-040",
+  "split": "holdout"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Organiser-authored budget request; calculate the valid published polygon without repairing or replacing its boundary.",
+  "question": "For an early budget estimate, give the area of Liverpool zone 2036/A1 in hectares, rounded to two decimal places. Use its actual published geometry in zones-2026-06-23.geojson, calculate in British National Grid metres, and do not repair or replace the boundary.",
+  "answer": "Zone 2036/A1 has an area of 3.00 hectares, calculated from its published geometry in British National Grid metres.",
+  "evidence": [
+   "zones-2026-06-23.geojson, properties.reference=2036/A1"
+  ],
+  "id": "dev-041",
+  "split": "dev"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Organiser-authored budget request; calculate the valid published polygon without repairing or replacing its boundary.",
+  "question": "For an early budget estimate, give the area of Liverpool zone 2245/W1 in hectares, rounded to two decimal places. Use its actual published geometry in zones-2026-06-23.geojson, calculate in British National Grid metres, and do not repair or replace the boundary.",
+  "answer": "Zone 2245/W1 has an area of 0.44 hectares, calculated from its published geometry in British National Grid metres.",
+  "evidence": [
+   "zones-2026-06-23.geojson, properties.reference=2245/W1"
+  ],
+  "id": "dev-042",
+  "split": "holdout"
+ },
+ {
+  "domain": "urban_greenery",
+  "context": "Organiser-authored budget request; calculate the valid published polygon without repairing or replacing its boundary.",
+  "question": "For an early budget estimate, give the area of Liverpool zone 2012/A1 in hectares, rounded to two decimal places. Use its actual published geometry in zones-2026-06-23.geojson, calculate in British National Grid metres, and do not repair or replace the boundary.",
+  "answer": "Zone 2012/A1 has an area of 1.37 hectares, calculated from its published geometry in British National Grid metres.",
+  "evidence": [
+   "zones-2026-06-23.geojson, properties.reference=2012/A1"
+  ],
+  "id": "dev-043",
+  "split": "dev"
+ },
+ {
+  "domain": "transport",
+  "context": "Use the numbers as they are visibly formatted in the supplied workbooks, rather than extra decimal places stored inside their cells. Keep intermediate calculations unrounded. Report percentages and percentage-point changes to two decimal places unless the question specifies otherwise.",
+  "question": "Compare bus passenger journeys in London for the year ending March 2025 with the year ending March 2019, as a percentage of the earlier year.",
+  "answer": "Journeys in London in the year ending March 2025 were 82.85% of the year-ending-March 2019 total.",
+  "evidence": [
+   "bus01.ods, sheet BUS01a, cells H29 and H23"
+  ],
+  "id": "dev-044",
+  "split": "dev"
+ },
+ {
+  "domain": "transport",
+  "context": "Use the numbers as they are visibly formatted in the supplied workbooks, rather than extra decimal places stored inside their cells. Keep intermediate calculations unrounded. Report percentages and percentage-point changes to two decimal places unless the question specifies otherwise.",
+  "question": "Compare bus passenger journeys in London for the year ending March 2025 with the year ending March 2022, as a percentage of the earlier year.",
+  "answer": "Journeys in London in the year ending March 2025 were 123.37% of the year-ending-March 2022 total.",
+  "evidence": [
+   "bus01.ods, sheet BUS01a, cells H29 and H26"
+  ],
+  "id": "dev-045",
+  "split": "dev"
+ },
+ {
+  "domain": "transport",
+  "context": "Use the numbers as they are visibly formatted in the supplied workbooks, rather than extra decimal places stored inside their cells. Keep intermediate calculations unrounded. Report percentages and percentage-point changes to two decimal places unless the question specifies otherwise.",
+  "question": "Compare bus passenger journeys in England for the year ending March 2025 with the year ending March 2019, as a percentage of the earlier year.",
+  "answer": "Journeys in England in the year ending March 2025 were 85.18% of the year-ending-March 2019 total.",
+  "evidence": [
+   "bus01.ods, sheet BUS01a, cells P29 and P23"
+  ],
+  "id": "dev-046",
+  "split": "dev"
+ },
+ {
+  "domain": "transport",
+  "context": "Use the numbers as they are visibly formatted in the supplied workbooks, rather than extra decimal places stored inside their cells. Keep intermediate calculations unrounded. Report percentages and percentage-point changes to two decimal places unless the question specifies otherwise.",
+  "question": "Compare bus passenger journeys in England for the year ending March 2025 with the year ending March 2022, as a percentage of the earlier year.",
+  "answer": "Journeys in England in the year ending March 2025 were 129.30% of the year-ending-March 2022 total.",
+  "evidence": [
+   "bus01.ods, sheet BUS01a, cells P29 and P26"
+  ],
+  "id": "dev-047",
+  "split": "dev"
+ },
+ {
+  "domain": "transport",
+  "context": "Use the numbers as they are visibly formatted in the supplied workbooks, rather than extra decimal places stored inside their cells. Keep intermediate calculations unrounded. Report percentages and percentage-point changes to two decimal places unless the question specifies otherwise.",
+  "question": "Compare bus passenger journeys in England outside London for the year ending March 2025 with the year ending March 2019, as a percentage of the earlier year.",
+  "answer": "Journeys in England outside London in the year ending March 2025 were 87.60% of the year-ending-March 2019 total.",
+  "evidence": [
+   "bus01.ods, sheet BUS01a, cells T29 and T23"
+  ],
+  "id": "dev-048",
+  "split": "holdout"
+ },
+ {
+  "domain": "transport",
+  "context": "Use the numbers as they are visibly formatted in the supplied workbooks, rather than extra decimal places stored inside their cells. Keep intermediate calculations unrounded. Report percentages and percentage-point changes to two decimal places unless the question specifies otherwise.",
+  "question": "Compare bus passenger journeys in England outside London for the year ending March 2025 with the year ending March 2022, as a percentage of the earlier year.",
+  "answer": "Journeys in England outside London in the year ending March 2025 were 135.70% of the year-ending-March 2022 total.",
+  "evidence": [
+   "bus01.ods, sheet BUS01a, cells T29 and T26"
+  ],
+  "id": "dev-049",
+  "split": "holdout"
+ },
+ {
+  "domain": "transport",
+  "context": "Use the numbers as they are visibly formatted in the supplied workbooks, rather than extra decimal places stored inside their cells. Keep intermediate calculations unrounded. Report percentages and percentage-point changes to two decimal places unless the question specifies otherwise.",
+  "question": "Can we publish a zero share of operating revenue for either the metropolitan or non-metropolitan group in the year ending March 2022 using bus04ii.ods? Someone treated [z] entries as zeros.",
+  "answer": "No. The workbook uses [z] to mean not applicable, not a measured zero, so it does not support assigning a zero share.",
+  "evidence": [
+   "bus04ii.ods, BUS04aii row 3 and cells C26:D26; Notes, note 4"
+  ],
+  "id": "dev-050",
+  "split": "dev"
+ }
+]

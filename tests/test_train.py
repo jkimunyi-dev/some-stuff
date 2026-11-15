@@ -62,3 +62,15 @@ def test_liverpool_reference_match():
 def test_zone_area():
     r = polygon_area(f("zones-2026-06-23.geojson"), "reference", "1912/A1", "EPSG:27700")
     assert round_half_up(r.value / 10_000) == 3.48
+
+
+def test_devset_deterministic_and_two_way_agree(tmp_path):
+    import json
+    from qa.devset import build
+
+    a, b = build(SRC), build(SRC)  # build() asserts method A == method B for every reference
+    assert a == b and len(a) >= 45
+    hold = [i for i in a if i["split"] == "holdout"]
+    assert 0.2 < len(hold) / len(a) < 0.45
+    committed = json.load(open(Path(__file__).parent.parent / "dev" / "dev_set.json", encoding="utf-8"))
+    assert committed == a
