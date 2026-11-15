@@ -88,6 +88,9 @@ def _geo_fields(p: Path):
     return list(info["fields"]), str(info.get("crs") or ""), int(info.get("features") or 0), str(info.get("geometry_type") or "")
 
 
+GENERIC_NAME_WORDS = {"data", "dataset", "report", "readme", "guide", "source", "sourceguide", "metadata", "notes", "attribution",
+                      "publisher", "analysis", "html", "file", "files", "table", "tables", "page", "pagemap", "summary", "final",
+                      "draft", "version", "copy", "full", "text", "document", "info", "information", "records", "description"}
 _SRC_CACHE: dict = {}
 _IDX_CACHE: dict = {}
 
@@ -938,6 +941,15 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         if op in ("text_answer", "explain"):
             chosen = [s.file for s in ss if s.kind == "text"]
             others = [s.file for s in pool if s.kind == "text" and s.file not in chosen]
+            # documents whose distinctive file-name words (e.g. a city name) appear in the question are the ones to read
+            alltext = list(dict.fromkeys(chosen + others))
+            stem = lambda p: set(re.findall(r"[a-z]{4,}", clean_name(p).lower().rsplit(".", 1)[0])) - GENERIC_NAME_WORDS
+            qwords = set(re.findall(r"[a-z]{4,}", question.lower()))
+            named_docs = [p for p in alltext if stem(p) & qwords]
+            if named_docs:
+                guides = [p for p in alltext if is_guide(p)]
+                chosen, others = list(dict.fromkeys(named_docs + guides)), []
+                trace["named_docs"] = [clean_name(p) for p in named_docs]
             found = text_index(chosen).search(f"{question} {context}", k=6) if chosen else []
             if len(found) < 3 and others:
                 found += text_index(others).search(f"{question} {context}", k=6 - len(found))
@@ -950,7 +962,9 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
               {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nCOMPUTED FACTS (exact; copy numbers verbatim, do not recompute or round differently):\n"
                                           + "\n".join(f"- {x}" for x in facts) + (f"\n\nSOURCE TEXT:\n{ctx_txt}" if ctx_txt else "")
                                           + "\n\nAnswer every part of the question in 1-3 plain sentences, with units. If the question asks yes/no, start with Yes or No. "
-                                            "If the data does not support what is asked, say so and why. Do not mention cells or files."
+                                            "Whenever the question asks for a number, count, date, name or identifier, state it explicitly from the facts or "
+                                            "source text; if it is not there, say which figure is missing. Give reasons ONLY from the facts or source text "
+                                            "(never from general knowledge). If the data does not support what is asked, say so and why. Do not mention cells or files."
                                           + (" Use only the passages; put the passage number you relied on in brackets, e.g. [P2]." if found else "")}]
         try:
             out = llm.chat(wm, led, think=False, profile="write", max_tokens=350, tag="write")
