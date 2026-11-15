@@ -55,6 +55,7 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--model", default="qwen2.5:3b-instruct")
     ap.add_argument("--think", action="store_true", help="let a thinking-capable model think during plan/bind calls")
+    ap.add_argument("--workers", type=int, default=1, help="questions answered concurrently (match OLLAMA_NUM_PARALLEL)")
     ap.add_argument("--out", default="")
     a = ap.parse_args()
     its = items(Path(a.data), Path(a.sources), a.split)
@@ -63,14 +64,21 @@ def main():
     llm = LLM(a.model)
     llm.think_plan = a.think
     rows = []
-    for i, it in enumerate(its):
+    def one(it):
         t0 = time.time()
         r = answer(llm, it["question"], it["context"], it["files"])
         row = dict(id=it["id"], domain=it["domain"], question=it["question"], reference=it["reference"], evidence_ref=it["evidence_ref"],
                    pack=[clean_name(f) for f in it["files"]], answer=r["answer"], evidence=r["evidence"], facts=r["facts"],
                    trace=r["trace"], error=r["error"], ledger=r["ledger"])
-        rows.append(row)
-        print(f"[{i + 1}/{len(its)}] {it['id'][:12]} {r['ledger']} op={r['trace'].get('plan', {}).get('op')} err={r['error']} ({time.time() - t0:.0f}s)", flush=True)
+        print(f"{it['id'][:12]} {r['ledger']} op={r['trace'].get('plan', {}).get('op')} err={r['error']} ({time.time() - t0:.0f}s)", flush=True)
+        return row
+
+    if a.workers > 1:  # independent questions in parallel; each keeps its own ledger (budgets are per question)
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(a.workers) as pool:
+            rows = list(pool.map(one, its))
+    else:
+        rows = [one(it) for it in its]
     s = score_items(rows)
     s["budget_violations"] = [r["id"] for r in rows if r["ledger"]["calls"] > 15 or r["ledger"]["tokens"] > 12000]
     s["errors"] = sum(1 for r in rows if r["error"])

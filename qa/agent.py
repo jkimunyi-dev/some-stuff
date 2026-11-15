@@ -130,7 +130,7 @@ def _ask_json(llm: LLM, led: Ledger, msgs: list[dict], schema: dict, tag: str, v
     """Call with an enforced JSON schema, parse, validate; feed errors back. Returns validated value."""
     last = None
     for k in range(tries):
-        out = llm.chat(msgs, led, think=think, profile="precise" if think else "extract", max_tokens=max_tokens + (2500 if think else 0),
+        out = llm.chat(msgs, led, think=think, profile="precise" if think else "extract", max_tokens=max_tokens + (800 if think else 0),
                        json_mode=schema, tag=f"{tag}{k}")
         try:
             obj = json.loads(out["text"])

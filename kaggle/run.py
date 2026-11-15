@@ -8,10 +8,11 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 OUT = Path("/kaggle/working")
 MODELS = ["qwen3.5:2b"]  # user choice; must be <= 3B total parameters (checked below)
-RUNS = [  # (name, extra args): real end-to-end Qwen runs only
-    ("qwen_dev", ["--split", "dev"]),
-    ("qwen_dev_think", ["--split", "dev", "--think"]),
-]
+PROFILES = {  # selected by the kernel's first argument; real end-to-end Qwen runs only
+    "full": [("qwen_dev", ["--split", "dev", "--workers", "4"]), ("qwen_dev_think", ["--split", "dev", "--think", "--workers", "4"])],
+    "fast": [("qwen_dev", ["--split", "dev", "--workers", "4"])],
+}
+RUNS = PROFILES[sys.argv[1] if len(sys.argv) > 1 else "full"]
 
 
 def sh(cmd, check=False, **kw):
@@ -44,7 +45,7 @@ print(len(os.listdir(SRC)), "source files")
 # --- ollama
 sh("apt-get -qq install -y zstd pciutils lshw > /dev/null 2>&1")
 sh("curl -fsSL https://ollama.com/install.sh | sh 2>&1 | tail -3")
-subprocess.Popen("nohup ollama serve > /kaggle/working/ollama.log 2>&1 &", shell=True)
+subprocess.Popen("OLLAMA_NUM_PARALLEL=4 nohup ollama serve > /kaggle/working/ollama.log 2>&1 &", shell=True)  # 4 concurrent requests
 for _ in range(60):
     try:
         urllib.request.urlopen("http://127.0.0.1:11434/api/version", timeout=2)
