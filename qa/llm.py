@@ -28,6 +28,8 @@ class BudgetExceeded(RuntimeError):
 class Ledger:
     """Per-question call log. Shared preprocessing that uses the model must be charged to each question that uses it."""
     calls: list[dict] = field(default_factory=list)
+    started: float = field(default_factory=time.time)
+    deadline_s: float = 240.0  # wall-clock cap per question: a run can never hang on one question
 
     @property
     def n_calls(self) -> int:
@@ -45,7 +47,7 @@ class Ledger:
 
 
 class LLM:
-    def __init__(self, model: str = "qwen2.5:3b-instruct", url: str = "http://127.0.0.1:11434", seed: int = 1234, timeout: int = 900):
+    def __init__(self, model: str = "qwen2.5:3b-instruct", url: str = "http://127.0.0.1:11434", seed: int = 1234, timeout: int = 120):
         self.model, self.url, self.seed, self.timeout = model, url.rstrip("/"), seed, timeout
         self._caps = None
 
@@ -63,6 +65,8 @@ class LLM:
              max_tokens: int = 2000, json_mode: bool | dict = False, tag: str = "") -> dict:
         if ledger.n_calls >= MAX_CALLS:
             raise BudgetExceeded(f"{MAX_CALLS} calls used")
+        if time.time() - ledger.started > ledger.deadline_s:
+            raise BudgetExceeded(f"question exceeded {ledger.deadline_s:.0f} s")
         left = ledger.remaining_tokens()
         if left <= 0:
             raise BudgetExceeded(f"{MAX_TOKENS} tokens used")

@@ -22,6 +22,7 @@ from .cards import guide_text, is_guide
 from .llm import LLM, BudgetExceeded, Ledger
 from .score import numbers
 from .tables import Table, clean_name, sheet_text, workbook_tables
+from .raster_op import TASKS as RASTER_TASKS, RasterError, legend as raster_legend, run_raster
 from .transit_op import MODELS as TRANSIT_MODELS, TASKS as TRANSIT_TASKS, TransitError, feed_for, run_transit, stop_options, trip_options
 from .gtfs import LOCATION_TYPES
 from .spatial_op import TASKS as SPATIAL_TASKS, SpatialError, anchor_options, run_spatial, stated_crs
@@ -47,6 +48,7 @@ OPS = {
     "table_query": "count / sum / average / min / max / distinct / duplicates over the RECORDS of a table, optionally filtered (e.g. value > 0, category = X) and grouped (e.g. per street, per type, top N)",
     "compare_keys": "compare identifier values between two files (values present in only one file, duplicates in each)",
     "area": "area of one polygon identified in the question, computed in a stated coordinate system",
+    "raster": "land-cover / gridded maps (.tif): area and share of map classes inside a boundary, comparing two map editions (change in a class, share of cells relabelled), how much of a boundary a map window covers",
     "transit": "public-transport timetable (GTFS) logic: trips active on a date (calendar exceptions), modelled walking route times through station pathways (step-free / without lifts), nearest entrance to a platform, a trip's time at a stop as local date and UTC, wheelchair access of a stop and its parent",
     "spatial": "distances between mapped features: how many features lie within N metres of a named feature, the nearest feature, features outside a coordinate box, overlap of two crown circles, height (Z) span of a 3D feature, invalid geometries",
     "explain": "the question asks whether the data SUPPORTS something or what a symbol/flag means (e.g. whether '[z]' entries can be treated as zero); no calculation",
@@ -60,6 +62,7 @@ EXAMPLES = """EXAMPLES (question -> operation):
 - "Average load per trip from the displayed tonne-km and trip totals?" -> ratio
 - "What were the start and end dates of record R17, and how many days apart?" -> record_lookup
 - "What is the area of polygon P-4 in hectares?" -> area
+- "What area of class 'Tree cover' lies inside district D, and how did it change between the two editions?" -> raster
 - "How many trips run on 3 March after exceptions?" / "Fastest step-free route from entrance E to platform 2?" -> transit
 - "How many trees lie within 20 m of tree T-9, including it?" / "Which entrance is closest to platform 2?" -> spatial
 - "How many rows have no end_date?" -> count_blank
@@ -80,6 +83,7 @@ class Source:
     columns: list[str] = field(default_factory=list)
     sheet: str | None = None  # record table read from a workbook sheet
     json_path: str | None = None  # record table read from a JSON array
+    fmt: str | None = None  # 'ifc:<table>' or 'las' record tables
 
 
 def _geo_fields(p: Path):
@@ -149,6 +153,27 @@ def _build_sources(files: list[Path]) -> list[Source]:
                 flds, crs, n, gt = _geo_fields(f)
                 fmt = {".gpkg": "GeoPackage", ".geojson": "GeoJSON", ".shp": "Shapefile", ".gml": "GML"}[suf]
                 add("geo", f, f"[{name}] {fmt} geographic layer of {gt or '?'} geometries, {n} features, CRS {crs or '?'}, fields: {', '.join(flds[:25])}", columns=flds)
+            elif suf in (".tif", ".tiff"):
+                import rasterio
+                with rasterio.open(f) as d:
+                    add("raster", f, f"[{name}] raster map {d.width}x{d.height} cells, CRS {d.crs}, cell size {d.res[0]:.6g}, nodata {d.nodata}, "
+                                     f"bounds {tuple(round(v, 4) for v in d.bounds)}")
+            elif suf == ".ifc":
+                from .formats import ifc_tables
+                for tname, df in ifc_tables(f).items():
+                    _DF_CACHE[(f, f"ifc:{tname}")] = df
+                    add("csv", f, f"[{name} | IFC {tname}] {len(df)} {tname} rows with all property-set values, columns: "
+                                  f"{', '.join(map(str, df.columns[:30]))}", columns=[str(c) for c in df.columns], fmt=f"ifc:{tname}")
+            elif suf in (".laz", ".las"):
+                import laspy
+                with laspy.open(f) as lf:
+                    h = lf.header
+                    hdr = (f"{h.point_count} point records; x {h.mins[0]:.2f}..{h.maxs[0]:.2f}, y {h.mins[1]:.2f}..{h.maxs[1]:.2f}, "
+                           f"z {h.mins[2]:.2f}..{h.maxs[2]:.2f} (file units); LAS {h.version}")
+                add("csv", f, f"[{name}] LiDAR point records: {hdr}; columns: X, Y, Z, classification, return_number, number_of_returns, "
+                              "intensity, withheld, synthetic, key_point, overlap",
+                    columns=["X", "Y", "Z", "classification", "return_number", "number_of_returns", "intensity", "withheld", "synthetic", "key_point", "overlap"],
+                    fmt="las")
             elif suf == ".json" and f.stat().st_size < 200_000_000:
                 try:
                     df, jp = json_records(f)
@@ -212,6 +237,12 @@ SKIP_REC_SHEET = re.compile(r"cover|contents|^notes?$|about|readme|metadata", re
 
 
 def load_df(s: Source) -> pd.DataFrame:
+    if s.fmt:
+        key = (s.file, s.fmt)
+        if key not in _DF_CACHE:
+            from .formats import ifc_tables, las_table
+            _DF_CACHE[key] = las_table(s.file)[0] if s.fmt == "las" else ifc_tables(s.file)[s.fmt.split(":", 1)[1]]
+        return _DF_CACHE[key]
     if s.sheet or s.json_path:
         key = (s.file, s.sheet or s.json_path)
         if key not in _DF_CACHE:
@@ -452,6 +483,38 @@ def iso_dates(text: str) -> list[str]:
     return list(dict.fromkeys(out))
 
 
+def boundary_options(question: str, geo: list) -> list[str]:
+    """'SID :: column = value' for features whose name words (>= 4 letters) all appear in the question, or that appear verbatim."""
+    qw = set(re.findall(r"[a-z]{4,}", question.lower()))
+    out = []
+    for x in geo:
+        df = load_df(x)
+        for c in df.columns:
+            if not (pd.api.types.is_object_dtype(df[c]) or pd.api.types.is_string_dtype(df[c])) or df[c].nunique() > 2000:
+                continue
+            for v in df[c].dropna().astype(str).unique():
+                w = set(re.findall(r"[a-z]{4,}", v.lower())) - {"city", "metropolitan", "municipality", "district", "county", "region"}
+                if w and (w <= qw or v in question):
+                    out.append(f"{x.sid} :: {c} = {v}")
+    return out[:15]
+
+
+def boundary_geom(opt: str, pool: list):
+    if not opt:
+        return None, ""
+    sid, rest = opt.split(" :: ", 1)
+    col, val = rest.split(" = ", 1)
+    src = next(x for x in pool if x.sid == sid)
+    import geopandas as gpd
+    g = gpd.read_file(src.file)
+    if g.crs and g.crs.to_epsg() != 4326:
+        g = g.to_crs("EPSG:4326")
+    m = g[g[col].astype(str) == val]
+    if m.empty:
+        raise KeyError(f"no feature {col} = {val}")
+    return m.geometry.union_all() if hasattr(m.geometry, "union_all") else m.geometry.unary_union, val
+
+
 def narrow(t: Table, question: str, gloss: dict, op: str):
     """Code-side narrowing of the options offered to the model, using facts detectable in the question and the table:
     years mentioned; blocks (places) named; total rows when no component is named; for flat tables, items sharing a word."""
@@ -582,7 +645,7 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             kinds = {s.kind for s in ss}
             need = {"value": {"table"}, "change": {"table"}, "percent_of": {"table"}, "share": {"table"}, "ratio": {"table"},
                     "record_lookup": {"csv", "geo"}, "count_blank": {"csv", "geo"}, "compare_keys": {"csv", "geo"}, "area": {"geo"}, "explain": None,
-                    "table_query": {"csv", "geo"}, "spatial": {"geo"}, "transit": None,
+                    "table_query": {"csv", "geo"}, "spatial": {"geo"}, "transit": None, "raster": None,
                     "text_answer": None}[o["operation"]]
             if need and not kinds <= need:
                 raise Fail(f"operation {o['operation']} needs a source of kind {sorted(need)}, got {sorted(kinds)}")
@@ -633,6 +696,8 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                             fit_rejected.append(key)  # one push-back; the model may insist
                             raise Fail(f"{best.sid} ({best.table.id}) matches '{side.strip()[:80]}' better than {chosen.sid} "
                                        f"({chosen.table.id}). Use {best.sid} for that side unless it is really the wrong measure.")
+            if o["operation"] == "raster" and not any(x.kind == "raster" for x in pool):
+                raise Fail("raster needs a .tif map among the sources; choose another operation")
             if o["operation"] == "transit" and feed_for(files) is None:
                 raise Fail("transit needs a GTFS feed (stops.txt, trips.txt, ...) in the sources; choose another operation")
             if o["operation"] in ("record_lookup", "area") and not id_candidates(question, ss[0]):
@@ -779,6 +844,40 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                         facts.append(f"{_label(e, gloss)} in {p}: {v!r} (cell {a1})")
             else:
                 facts, keys = run_table_op(op, b, ss, ex, gloss)
+        elif op == "raster":
+            rs = {x.sid: x for x in pool if x.kind == "raster"}
+            for x in rs.values():
+                x.label = clean_name(x.file)
+            txt = " ".join(guide_text(x.file) for x in pool if x.kind == "text" and x.file.suffix.lower() in (".txt", ".md"))
+            leg = {k: v for k, v in raster_legend(txt).items() if k > 0}
+            bopts = boundary_options(question, [x for x in pool if x.kind == "geo"])
+            codes = sorted(leg) or list(range(0, 256))
+            bs = _enum_schema({"reasoning": {"type": "string", "maxLength": 200},
+                               "task": {"type": "string", "enum": RASTER_TASKS},
+                               "raster": {"type": "string", "enum": list(rs)}, "second_raster": {"type": "string", "enum": [""] + list(rs)},
+                               "boundary": {"type": "string", "enum": [""] + bopts},
+                               "classes": {"type": "array", "items": {"type": "integer", "enum": codes}, "maxItems": 6},
+                               "exclude_classes": {"type": "array", "items": {"type": "integer", "enum": codes}, "maxItems": 4}})
+            bm = [{"role": "system", "content": SYS},
+                  {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nRASTERS:\n" + "\n".join(f"{k}: {v.desc}" for k, v in rs.items())
+                                              + f"\nClass legend: {', '.join(f'{k} {v}' for k, v in leg.items()) or '(not found)'}\n"
+                                              f"Boundary features found for the question: {'; '.join(bopts) or '(none)'}\n"
+                                              "Pick the task (class_areas / compare two editions / coverage of a boundary by a map window), the raster "
+                                              "(older edition first for compare), the boundary feature if the question limits the area, the classes asked "
+                                              "about (empty = all), and classes to exclude only if the question or Context says so. Reply as JSON."}]
+
+            def vr(o):
+                o.pop("reasoning", None)
+                try:
+                    geom, lab = boundary_geom(o.get("boundary") or "", pool)
+                    run_raster(o, rs, geom, lab, leg, context, Recorder())
+                except (RasterError, KeyError, ValueError, IndexError) as e:
+                    raise Fail(f"{type(e).__name__}: {e}")
+                return o
+            b = _ask_json(llm, led, bm, bs, "bind", vr, think=getattr(llm, "think_plan", False))
+            trace["bind"] = b
+            geom, lab = boundary_geom(b.get("boundary") or "", pool)
+            facts, keys = run_raster(b, rs, geom, lab, leg, context, ex.rec)
         elif op == "transit":
             fd = feed_for(files)
             stops = stop_options(fd, f"{question} {context}") or ["(none)"]
@@ -854,7 +953,7 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             df = load_df(s0)
             C = [str(c) for c in df.columns]
             hits = value_hits(df, question)
-            name = clean_name(s0.file) + (f" sheet {s0.sheet}" if s0.sheet else "")
+            name = clean_name(s0.file) + (f" sheet {s0.sheet}" if s0.sheet else "") + (f" {s0.fmt}" if s0.fmt and s0.fmt != "las" else "")
             fsch = _enum_schema({"column": {"type": "string", "enum": C}, "op": {"type": "string", "enum": FILTER_OPS},
                                  "value": {"type": "string", "maxLength": 120}})
             bs = _enum_schema({"reasoning": {"type": "string", "maxLength": 200, "description": "one short sentence: which records, which measure"},

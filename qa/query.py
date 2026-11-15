@@ -93,6 +93,8 @@ def value_hits(df: pd.DataFrame, question: str, limit: int = 12) -> list[str]:
     """'column = value' for values that appear verbatim (whole token) in the question."""
     out, q = [], question
     for c in df.columns:
+        if len(df) > 1_000_000 and df[c].dtype.kind in "fiub":  # huge numeric columns (e.g. point clouds): no verbatim ids there
+            continue
         vals = set(df[c].dropna().astype(str).str.strip())
         if len(vals) > 200_000:
             continue

@@ -9,6 +9,7 @@ rasterio
 pypdf
 pdfplumber
 laspy
+lazrs
 lxml
 beautifulsoup4
 networkx
