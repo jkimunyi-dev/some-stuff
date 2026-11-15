@@ -12,6 +12,7 @@ PROFILES = {  # selected by the kernel's first argument; real end-to-end Qwen ru
     "full": [("qwen_dev", ["--split", "dev", "--workers", "4"]), ("qwen_dev_think", ["--split", "dev", "--think", "--workers", "4"])],
     "fast": [("qwen_dev", ["--split", "dev", "--workers", "4"])],
     "submit": [("SUBMIT", [])],
+    "dev_submit": [("qwen_dev", ["--split", "dev", "--workers", "4"]), ("SUBMIT", [])],
     "confirm": [("qwen_dev", ["--split", "dev", "--workers", "4"]), ("qwen_holdout", ["--split", "holdout", "--workers", "4"])],
 }
 RUNS = PROFILES[sys.argv[1] if len(sys.argv) > 1 else "full"]
