@@ -50,6 +50,7 @@ class Table:
     rows: dict = field(default_factory=dict)  # entity -> sheet row (layout A)
     raw: dict = field(default_factory=dict)  # (entity, period) -> cell text, for structure checks
     aggregates: dict = field(default_factory=dict)  # block -> [blocks it is the sum of]
+    measure: str = ""  # short line naming what the numbers are (e.g. 'Passenger journeys (millions)')
     totals: dict = field(default_factory=dict)  # block -> its total row entity (a row equal to the sum of the rows above it)
 
     @property
@@ -154,7 +155,7 @@ def tables_from_sheet(path: Path, sheet: str, g: dict) -> list[Table]:
                 title = _title_above(g, min(rr for rr in runs_by_row if any(x[0] == run[0] for x in runs_by_row[rr])), lc + 1)
                 k = len([t for t in tabs]) + 1
                 tid = f"{fname} | {sheet}" + (f" | table {k} (cols {col_letter(run[0])}-{col_letter(run[-1])})" if len({x[0] for rs in runs_by_row.values() for x in rs}) > 1 else "")
-                tabs[key] = Table(tid, path, sheet, title or sheet_title, _unit_text(title, sheet_title), periods=[_year(g[(r, c)]) for c in run])
+                tabs[key] = Table(tid, path, sheet, title or sheet_title, _unit_text(title, sheet_title), periods=[_year(g[(r, c)]) for c in run], measure=title or sheet_title)
             t = tabs[key]
             block = g.get((r, lc), "") if lc >= 1 else ""
             # entity rows: until the next header row of this table, a blank label, or the end of the sheet
@@ -204,7 +205,7 @@ def tables_from_sheet(path: Path, sheet: str, g: dict) -> list[Table]:
             if len(heads) < 1:
                 continue
             unit_row = g.get((hr - 1, 1), "")
-            t = Table(f"{fname} | {sheet}", path, sheet, sheet_title, _unit_text(unit_row, sheet_title), periods=[_year(g[(r, c)]) for r in run])
+            t = Table(f"{fname} | {sheet}", path, sheet, sheet_title, _unit_text(unit_row, sheet_title), periods=[_year(g[(r, c)]) for r in run], measure=unit_row or sheet_title)
             for cc, h in heads.items():
                 if not any((r, cc) in g for r in run):
                     continue

@@ -374,6 +374,23 @@ def explain_context(srcs: list[Source], all_srcs: list[Source]) -> str:
     return "\n".join(parts)[:7000]
 
 
+def table_fit(s: Source, query: str) -> float:
+    """How well a table's measure line ('Passenger journeys (millions)') matches the query: matched words minus half the
+    unmatched ones, on 6-letter stems. Short measure lines discriminate; long titles do not."""
+    from .textqa import tokens
+    if s.kind != "table":
+        return 0.0
+    stem = lambda w: w[:6]
+    m = {stem(w) for w in tokens(re.sub(r"\(.*?\)", "", s.table.measure or s.table.title))}
+    q = {stem(w) for w in tokens(query)}
+    return len(m & q) - 0.5 * len(m - q)
+
+
+def best_table(pool: list[Source], query: str) -> Source | None:
+    tabs = [s for s in pool if s.kind == "table"]
+    return max(tabs, key=lambda s: table_fit(s, query)) if tabs else None
+
+
 def rank_sources(pool: list[Source], query: str, k: int) -> list[Source]:
     import math
     from collections import Counter
@@ -428,7 +445,7 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         catalog = "\n".join(f"{s.sid}: {s.desc}" for s in pool)
         ops_txt = "\n".join(f"- {k}: {v}" for k, v in OPS.items())
         # ---- call 1: operation + sources
-        sch = _enum_schema({"what_is_asked": {"type": "string", "description": "one short sentence: the quantity asked and, for a ratio, what the numerator and denominator are"},
+        sch = _enum_schema({"what_is_asked": {"type": "string", "maxLength": 220, "description": "one short sentence: the quantity asked and, for a ratio, 'numerator: ...; denominator: ...'"},
                             "operation": {"type": "string", "enum": list(OPS)},
                             "sources": {"type": "array", "items": {"type": "string", "enum": list(by_id)}, "minItems": 1, "maxItems": 2}})
         msg = [{"role": "system", "content": SYS},
@@ -436,6 +453,8 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                                            "Choose the operation that answers the main calculation in the question, and the source(s) holding the data "
                                            "(two sources only for ratio or compare_keys across files). Match the measure exactly (e.g. passenger vs vehicle, "
                                            "current vs constant prices). If several tables hold the same measure, prefer the main summary table with the fewest items. Reply as JSON."}]
+
+        fit_rejected = trace.setdefault("fit_pushback", [])
 
         def v1(o):
             if o["operation"] not in OPS:
@@ -447,6 +466,18 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                     "text_answer": None}[o["operation"]]
             if need and not kinds <= need:
                 raise Fail(f"operation {o['operation']} needs a source of kind {sorted(need)}, got {sorted(kinds)}")
+            wa = o.get("what_is_asked", "")
+            if o["operation"] == "ratio" and "denominator" in wa.lower():  # fit check only on the model's own ratio sides
+                num, den = re.split(r"denominator", wa, flags=re.I, maxsplit=1)
+                sides = [num, den]
+                for side, chosen in zip(sides, ss):
+                    best = best_table(pool, side)
+                    if best and best is not chosen:
+                        key = f"fit:{chosen.sid}->{best.sid}"
+                        if key not in fit_rejected and table_fit(best, side) >= table_fit(chosen, side) + 1.0:
+                            fit_rejected.append(key)  # one push-back; the model may insist
+                            raise Fail(f"{best.sid} ({best.table.id}) matches '{side.strip()[:80]}' better than {chosen.sid} "
+                                       f"({chosen.table.id}). Use {best.sid} for that side unless it is really the wrong measure.")
             if o["operation"] in ("record_lookup", "area") and not id_candidates(question, ss[0]):
                 raise Fail(f"no identifier from the question occurs in {clean_name(ss[0].file)}; choose the source that contains it")
             return o
@@ -478,7 +509,7 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             t0 = ss[0].table
             show = lambda t: "\n".join(f"  {e}" + (f"   (= {_label(e, gloss)})" if gloss and _label(e, gloss) != e else "") for e in t.entities)
             E, P = t0.entities, t0.periods
-            R = {"reasoning": {"type": "string", "description": "one short sentence naming the items and periods the question asks for"}}
+            R = {"reasoning": {"type": "string", "maxLength": 200, "description": "one short sentence naming the items and periods the question asks for"}}
             if op == "value" or op == "explain":
                 bs = _enum_schema({**R, "entities": {"type": "array", "items": {"type": "string", "enum": E}, "minItems": 1, "maxItems": 8},
                                    "periods": {"type": "array", "items": {"type": "string", "enum": P}, "minItems": 1, "maxItems": 6}})
@@ -495,6 +526,8 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             notes = [f"Block '{b}' is the TOTAL of blocks {', '.join(o)} (the whole area/group)." for b, o in t0.aggregates.items()]
             if t0.totals:
                 notes.append("Total row of each block: " + "; ".join(t0.totals.values()))
+                if re.search(r"\btotal\b", question, re.I):
+                    notes.append("The question asks about TOTAL consumption/values: use these total rows, not a single component row.")
             qt = set(re.findall(r"[a-z0-9]+", question.lower()))
             def _w(e):
                 return set(re.findall(r"[a-z0-9]+", re.sub(r"\[.*?\]", "", _label(e, gloss).lower()))) - {"and", "of", "the"}
@@ -537,8 +570,11 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                         key = f"{pr['part']}|{pr['whole']}"
                         if own and pr["whole"] != own and pr["part"] != own and key not in rejected:
                             rejected.append(key)  # one push-back; if the model insists, accept its choice
-                            raise Fail(f"the whole for {pr['part']} is normally its own block total '{own}'. Choose it unless the question "
-                                       f"explicitly asks for a share of a different group's total")
+                            wb = pr["whole"].split(" / ", 1)[0] if " / " in pr["whole"] else ""
+                            lab = pr["part"].split(" / ", 1)[-1]
+                            alt = f"'{wb} / {lab}' with '{pr['whole']}'" if f"{wb} / {lab}" in E else None
+                            raise Fail(f"part and whole come from different blocks. Use either '{pr['part']}' with its own block total '{own}'"
+                                       + (f", or {alt} if the question is about the {wb} block as a whole" if alt else "") + ".")
                 if op == "explain":
                     return o
                 # dry-run: every value must resolve to a number
