@@ -89,10 +89,15 @@ def build_sources(files: list[Path]) -> list[Source]:
                     add("table", f, t.describe(), table=t)
             elif suf in (".csv", ".tsv") or (suf == ".txt" and not is_guide(f) and f.stat().st_size < 50_000_000 and "," in f.open(encoding="utf-8-sig", errors="ignore").readline()):
                 df = read_table(f, nrows=200)
-                add("csv", f, f"[{name}] table with {len(df.columns)} columns: {', '.join(df.columns[:25])}", columns=list(df.columns))
+                wkt = r"^\s*((?:MULTI)?(?:POINT|POLYGON|LINESTRING))"
+                pts = next((c for c in df.columns if df[c].astype(str).str.match(wkt, case=False).any()), None)
+                gtyp = df[pts].astype(str).str.extract(wkt, flags=re.I)[0].dropna().iloc[0].lower() if pts else ""
+                kind = "CSV" + (f" with {gtyp} geometries as WKT in column {pts}" if pts else "")
+                add("csv", f, f"[{name}] {kind} table with {len(df.columns)} columns: {', '.join(df.columns[:25])}", columns=list(df.columns))
             elif suf in (".geojson", ".gpkg", ".shp", ".gml"):
                 flds, crs, n, gt = _geo_fields(f)
-                add("geo", f, f"[{name}] geographic layer of {gt or '?'} geometries, {n} features, CRS {crs or '?'}, fields: {', '.join(flds[:25])}", columns=flds)
+                fmt = {".gpkg": "GeoPackage", ".geojson": "GeoJSON", ".shp": "Shapefile", ".gml": "GML"}[suf]
+                add("geo", f, f"[{name}] {fmt} geographic layer of {gt or '?'} geometries, {n} features, CRS {crs or '?'}, fields: {', '.join(flds[:25])}", columns=flds)
             elif is_guide(f) or suf in TEXT_SUFFIXES:
                 snippet = re.sub(r"\s+", " ", guide_text(f))[:300] if is_guide(f) else ""
                 add("text", f, f"[{name}] document/notes" + (f": {snippet}" if snippet else ""))
@@ -423,7 +428,8 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         catalog = "\n".join(f"{s.sid}: {s.desc}" for s in pool)
         ops_txt = "\n".join(f"- {k}: {v}" for k, v in OPS.items())
         # ---- call 1: operation + sources
-        sch = _enum_schema({"operation": {"type": "string", "enum": list(OPS)},
+        sch = _enum_schema({"what_is_asked": {"type": "string", "description": "one short sentence: the quantity asked and, for a ratio, what the numerator and denominator are"},
+                            "operation": {"type": "string", "enum": list(OPS)},
                             "sources": {"type": "array", "items": {"type": "string", "enum": list(by_id)}, "minItems": 1, "maxItems": 2}})
         msg = [{"role": "system", "content": SYS},
                {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nOPERATIONS:\n{ops_txt}\n\n{EXAMPLES}\n\nSOURCES:\n{catalog}\n\n"
@@ -472,22 +478,27 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             t0 = ss[0].table
             show = lambda t: "\n".join(f"  {e}" + (f"   (= {_label(e, gloss)})" if gloss and _label(e, gloss) != e else "") for e in t.entities)
             E, P = t0.entities, t0.periods
+            R = {"reasoning": {"type": "string", "description": "one short sentence naming the items and periods the question asks for"}}
             if op == "value" or op == "explain":
-                bs = _enum_schema({"entities": {"type": "array", "items": {"type": "string", "enum": E}, "minItems": 1, "maxItems": 8},
+                bs = _enum_schema({**R, "entities": {"type": "array", "items": {"type": "string", "enum": E}, "minItems": 1, "maxItems": 8},
                                    "periods": {"type": "array", "items": {"type": "string", "enum": P}, "minItems": 1, "maxItems": 6}})
             elif op in ("change", "percent_of"):
-                bs = _enum_schema({"entities": {"type": "array", "items": {"type": "string", "enum": E}, "minItems": 1, "maxItems": 8},
+                bs = _enum_schema({**R, "entities": {"type": "array", "items": {"type": "string", "enum": E}, "minItems": 1, "maxItems": 8},
                                    "period_from": {"type": "string", "enum": P}, "period_to": {"type": "string", "enum": P}})
             elif op == "share":
-                bs = _enum_schema({"pairs": {"type": "array", "minItems": 1, "maxItems": 4, "items": _enum_schema({"part": {"type": "string", "enum": E}, "whole": {"type": "string", "enum": E}})},
+                bs = _enum_schema({**R, "pairs": {"type": "array", "minItems": 1, "maxItems": 4, "items": _enum_schema({"part": {"type": "string", "enum": E}, "whole": {"type": "string", "enum": E}})},
                                    "period": {"type": "string", "enum": P}})
             else:  # ratio
                 t1 = ss[-1].table
-                bs = _enum_schema({"numerator": _enum_schema({"entity": {"type": "string", "enum": E}, "period": {"type": "string", "enum": P}}),
+                bs = _enum_schema({**R, "numerator": _enum_schema({"entity": {"type": "string", "enum": E}, "period": {"type": "string", "enum": P}}),
                                    "denominator": _enum_schema({"entity": {"type": "string", "enum": t1.entities}, "period": {"type": "string", "enum": t1.periods}})})
             notes = [f"Block '{b}' is the TOTAL of blocks {', '.join(o)} (the whole area/group)." for b, o in t0.aggregates.items()]
+            if t0.totals:
+                notes.append("Total row of each block: " + "; ".join(t0.totals.values()))
             qt = set(re.findall(r"[a-z0-9]+", question.lower()))
-            named = [e for e in E if (lambda w: w and w <= qt)(set(re.findall(r"[a-z0-9]+", re.sub(r"\[.*?\]", "", _label(e, gloss).lower()))) - {"and", "of", "the"})]
+            def _w(e):
+                return set(re.findall(r"[a-z0-9]+", re.sub(r"\[.*?\]", "", _label(e, gloss).lower()))) - {"and", "of", "the"}
+            named = [e for e in E if _w(e) and (_w(e) <= qt or len(_w(e) & qt) >= 2)]
             if named:
                 notes.append("Items whose names appear in the question: " + "; ".join(named[:10]))
             listing = f"TABLE {t0.id}\nTitle: {t0.title}\nUnit: {t0.unit}\n" + "".join(n + "\n" for n in notes) + f"Items:\n{show(t0)}\nPeriods: {', '.join(P)}"
@@ -503,9 +514,14 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             bm = [{"role": "system", "content": SYS},
                   {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\n{listing}\n\n{how} Choose ONLY the items the question "
                                               "names (usually 1-3); never add others. An area-wide or regional total is the block named for that area, not one of its cities. "
+                                              "Keep all chosen items in the same block unless the question names different places. "
+                                              "'The rest of X' or 'X excluding Y' means an item such as 'X outside Y' when one is listed. "
                                               "Use labels exactly as listed. Reply as JSON."}]
 
+            rejected = trace.setdefault("share_pushback", [])
+
             def vb(o):
+                o.pop("reasoning", None)
                 if "entities" in o:
                     o["entities"] = list(dict.fromkeys(o["entities"]))
                 if op == "change" and o["period_from"] == o["period_to"]:
@@ -516,6 +532,13 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                     for pr in o["pairs"]:
                         if pr["part"] == pr["whole"]:
                             raise Fail("part and whole must differ")
+                        blk = pr["part"].split(" / ", 1)[0] if " / " in pr["part"] else ""
+                        own = t0.totals.get(blk)
+                        key = f"{pr['part']}|{pr['whole']}"
+                        if own and pr["whole"] != own and pr["part"] != own and key not in rejected:
+                            rejected.append(key)  # one push-back; if the model insists, accept its choice
+                            raise Fail(f"the whole for {pr['part']} is normally its own block total '{own}'. Choose it unless the question "
+                                       f"explicitly asks for a share of a different group's total")
                 if op == "explain":
                     return o
                 # dry-run: every value must resolve to a number

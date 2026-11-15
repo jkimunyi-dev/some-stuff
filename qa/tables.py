@@ -50,6 +50,7 @@ class Table:
     rows: dict = field(default_factory=dict)  # entity -> sheet row (layout A)
     raw: dict = field(default_factory=dict)  # (entity, period) -> cell text, for structure checks
     aggregates: dict = field(default_factory=dict)  # block -> [blocks it is the sum of]
+    totals: dict = field(default_factory=dict)  # block -> its total row entity (a row equal to the sum of the rows above it)
 
     @property
     def scale(self) -> float:
@@ -181,6 +182,7 @@ def tables_from_sheet(path: Path, sheet: str, g: dict) -> list[Table]:
                 rr += 1
     for t in tabs.values():
         detect_aggregates(t)
+        detect_totals(t)
     found += [t for t in tabs.values() if t.entities]
 
     # ---- layout B: a column holding consecutive years down the rows
@@ -249,6 +251,27 @@ def detect_aggregates(t: Table) -> None:
                 hit += abs(tot - sum(vals)) <= 1e-6 * max(1.0, abs(tot))
         if checked >= 6 and hit >= 0.8 * checked:  # published totals can carry small source quirks
             t.aggregates[b] = others
+
+
+def detect_totals(t: Table) -> None:
+    """Within each block, a row equal to the sum of the rows listed before it (in most recent periods) is the block total."""
+    order: dict = {}
+    for e in t.entities:
+        b = e.split(" / ", 1)[0] if " / " in e else ""
+        order.setdefault(b, []).append(e)
+    for b, ents in order.items():
+        for i in range(2, len(ents)):
+            hit = checked = 0
+            for p in t.periods[-3:]:
+                tot = _f(t.raw.get((ents[i], p)))
+                vals = [_f(t.raw.get((x, p))) for x in ents[:i]]
+                if tot is None or any(v is None for v in vals):
+                    continue
+                checked += 1
+                hit += abs(tot - sum(vals)) <= 1e-6 * max(1.0, abs(tot))
+            if checked and hit == checked:
+                t.totals[b] = ents[i]
+                break
 
 
 def workbook_tables(path: Path) -> list[Table]:
