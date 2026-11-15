@@ -33,7 +33,7 @@ print("DATA", DATA, os.listdir(DATA))
 sh(f"pip -q install -r {REPO}/requirements.txt pytest 2>&1 | tail -2")
 
 # --- extract sources
-EX = Path("/kaggle/working/extracted")
+EX = Path("/tmp/extracted")  # NOT /kaggle/working: that would ship 437MB of sources as kernel output
 if not (EX / "sources").is_dir():
     z = next(p for p in DATA.iterdir() if p.stat().st_size > 50_000_000 and zipfile.is_zipfile(p))
     zipfile.ZipFile(z).extractall(EX)
