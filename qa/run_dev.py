@@ -54,12 +54,14 @@ def main():
     ap.add_argument("--split", choices=["dev", "holdout", "all"], default="dev")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--model", default="qwen2.5:3b-instruct")
+    ap.add_argument("--think", action="store_true", help="let a thinking-capable model think during plan/bind calls")
     ap.add_argument("--out", default="")
     a = ap.parse_args()
     its = items(Path(a.data), Path(a.sources), a.split)
     if a.limit:
         its = its[: a.limit]
     llm = LLM(a.model)
+    llm.think_plan = a.think
     rows = []
     for i, it in enumerate(its):
         t0 = time.time()

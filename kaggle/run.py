@@ -10,6 +10,7 @@ OUT = Path("/kaggle/working")
 MODELS = ["qwen3.5:2b"]  # user choice; must be <= 3B total parameters (checked below)
 RUNS = [  # (name, extra args): real end-to-end Qwen runs only
     ("qwen_dev", ["--split", "dev"]),
+    ("qwen_dev_think", ["--split", "dev", "--think"]),
 ]
 
 

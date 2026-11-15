@@ -32,17 +32,27 @@ CRS = {"British National Grid (EPSG:27700)": "EPSG:27700", "WGS 84 longitude/lat
 AREA_UNITS = {"hectares": 1e4, "square metres": 1.0, "square kilometres": 1e6, "acres": 4046.8564224}
 
 OPS = {
-    "value": "read value(s) of named items for given period(s) from a table",
-    "change": "change of one or more items between two periods (absolute and percent); also says which item changed most",
-    "percent_of": "a later period's value as a percentage of an earlier period's value (e.g. 2025 as % of 2019) for one or more items",
-    "share": "a part as a percentage of a whole in the same period (e.g. one sector's share of a total), for one or more part/whole pairs",
-    "ratio": "one quantity divided by another, possibly from two different tables (e.g. distance per journey)",
-    "record_lookup": "read fields of one record found by its key in a CSV/table (e.g. dates of one order), optionally days between two date fields",
-    "count_blank": "count empty values in one column of a CSV/table, and the total number of records",
-    "compare_keys": "compare a key column between two files: values only in one file, and duplicates in each",
-    "area": "area of one feature/polygon in a geographic file, computed in a stated coordinate system",
-    "explain": "the question asks what the data means or supports (e.g. whether a value can be treated as zero) rather than a calculation",
+    "value": "look up the value(s) of named item(s) in given year(s)/period(s) of a table",
+    "change": "HOW MUCH an item rose/fell/changed FROM one period TO another (difference and percent change); with several items also says which changed most",
+    "percent_of": "the SAME item in a later period expressed AS A PERCENTAGE OF ITS OWN earlier period (e.g. 'journeys in 2025 as a percentage of 2019', 'how close to its 2019 level')",
+    "share": "what share/percentage OF A TOTAL one part makes up IN ONE period (e.g. 'what share of total energy use in 2024 was residential', 'compare two cities' residential shares')",
+    "ratio": "divide one total by another, possibly from two different tables (e.g. 'average distance per journey' = passenger-kilometres / journeys)",
+    "record_lookup": "find ONE record by an identifier mentioned in the question (e.g. an order or zone reference) and report its fields; optionally days between two of its dates",
+    "count_blank": "how many records have an empty/missing value in a column, and the total number of records",
+    "compare_keys": "compare identifier values between two files (values present in only one file, duplicates in each)",
+    "area": "area of one polygon identified in the question, computed in a stated coordinate system",
+    "explain": "the question asks whether the data SUPPORTS something or what a symbol/flag means (e.g. whether '[z]' entries can be treated as zero); no calculation",
 }
+EXAMPLES = """EXAMPLES (question -> operation):
+- "How much did X's consumption rise from 2020 to 2022, in GWh and percent?" -> change
+- "Which of A, B and C grew most from 2019 to 2021?" -> change
+- "What share of X's total in 2021 was transport?" -> share
+- "Compare X in 2024 with 2018 as a percentage of the earlier year." -> percent_of
+- "Average load per trip from the displayed tonne-km and trip totals?" -> ratio
+- "What were the start and end dates of record R17, and how many days apart?" -> record_lookup
+- "What is the area of polygon P-4 in hectares?" -> area
+- "How many rows have no end_date?" -> count_blank
+- "Can we treat the '[x]' entries as zero?" -> explain"""
 
 
 # ------------------------------------------------------------------ sources
@@ -59,7 +69,7 @@ class Source:
 def _geo_fields(p: Path):
     import pyogrio
     info = pyogrio.read_info(p)
-    return list(info["fields"]), str(info.get("crs") or ""), int(info.get("features") or 0)
+    return list(info["fields"]), str(info.get("crs") or ""), int(info.get("features") or 0), str(info.get("geometry_type") or "")
 
 
 def build_sources(files: list[Path]) -> list[Source]:
@@ -78,8 +88,8 @@ def build_sources(files: list[Path]) -> list[Source]:
                 df = read_table(f, nrows=200)
                 add("csv", f, f"[{name}] table with {len(df.columns)} columns: {', '.join(df.columns[:25])}", columns=list(df.columns))
             elif suf in (".geojson", ".gpkg", ".shp", ".gml"):
-                flds, crs, n = _geo_fields(f)
-                add("geo", f, f"[{name}] geographic layer, {n} features, CRS {crs or '?'}, fields: {', '.join(flds[:25])}", columns=flds)
+                flds, crs, n, gt = _geo_fields(f)
+                add("geo", f, f"[{name}] geographic layer of {gt or '?'} geometries, {n} features, CRS {crs or '?'}, fields: {', '.join(flds[:25])}", columns=flds)
             elif is_guide(f) or suf in (".md", ".txt", ".pdf", ".html"):
                 snippet = re.sub(r"\s+", " ", guide_text(f))[:300] if is_guide(f) else ""
                 add("text", f, f"[{name}] document/notes" + (f": {snippet}" if snippet else ""))
@@ -110,11 +120,12 @@ def _enum_schema(props: dict, required: list[str] | None = None) -> dict:
     return {"type": "object", "properties": props, "required": required or list(props)}
 
 
-def _ask_json(llm: LLM, led: Ledger, msgs: list[dict], schema: dict, tag: str, validate, tries: int = 3, max_tokens: int = 600):
+def _ask_json(llm: LLM, led: Ledger, msgs: list[dict], schema: dict, tag: str, validate, tries: int = 3, max_tokens: int = 600, think: bool = False):
     """Call with an enforced JSON schema, parse, validate; feed errors back. Returns validated value."""
     last = None
     for k in range(tries):
-        out = llm.chat(msgs, led, think=False, profile="extract", max_tokens=max_tokens, json_mode=schema, tag=f"{tag}{k}")
+        out = llm.chat(msgs, led, think=think, profile="precise" if think else "extract", max_tokens=max_tokens + (2500 if think else 0),
+                       json_mode=schema, tag=f"{tag}{k}")
         try:
             obj = json.loads(out["text"])
             return validate(obj)
@@ -122,6 +133,35 @@ def _ask_json(llm: LLM, led: Ledger, msgs: list[dict], schema: dict, tag: str, v
             last = f"{type(e).__name__}: {e}"
             msgs = msgs + [{"role": "assistant", "content": out["text"]}, {"role": "user", "content": f"That is invalid: {last}. Answer again with corrected JSON."}]
     raise Fail(f"{tag} failed after {tries} tries: {last}")
+
+
+_DF_CACHE: dict = {}
+
+
+def load_df(s: Source) -> pd.DataFrame:
+    if s.file not in _DF_CACHE:
+        if s.kind == "geo":
+            import geopandas as gpd
+            _DF_CACHE[s.file] = pd.DataFrame(gpd.read_file(s.file).drop(columns="geometry"))
+        else:
+            _DF_CACHE[s.file] = read_table(s.file)
+    return _DF_CACHE[s.file]
+
+
+def id_candidates(question: str, s: Source, limit: int = 15) -> list[str]:
+    """'column = value' pairs whose value occurs verbatim (as a whole token) in the question. Code finds them; the model picks."""
+    df, q, out = load_df(s), question, []
+    for c in df.columns:
+        for v in set(df[c].dropna().astype(str).str.strip()):
+            if len(v) < 3 or v not in q or not re.search(r"\d", v):
+                continue
+            i = q.find(v)
+            tok = lambda ch: ch.isalnum() or ch in "/-_"  # an identifier embedded in a longer token is not a match
+            if (i > 0 and tok(q[i - 1])) or (i + len(v) < len(q) and tok(q[i + len(v)])):
+                continue
+            out.append(f"{c} = {v}")
+    out.sort(key=lambda x: -len(x.split(" = ", 1)[1]))
+    return out[:limit]
 
 
 # ------------------------------------------------------------------ executor
@@ -322,16 +362,21 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         srcs = build_sources(files)
         if not srcs:
             raise Fail("no readable sources")
-        by_id = {s.sid: s for s in srcs}
-        catalog = "\n".join(f"{s.sid}: {s.desc}" for s in srcs)
+        named = {s.file for s in srcs if clean_name(s.file).lower() in question.lower()}
+        pool = [s for s in srcs if s.file in named] if named else srcs  # a file named in the question restricts the choice
+        if named:
+            trace["named_files"] = sorted(clean_name(f) for f in named)
+        by_id = {s.sid: s for s in pool}
+        catalog = "\n".join(f"{s.sid}: {s.desc}" for s in pool)
         ops_txt = "\n".join(f"- {k}: {v}" for k, v in OPS.items())
         # ---- call 1: operation + sources
         sch = _enum_schema({"operation": {"type": "string", "enum": list(OPS)},
                             "sources": {"type": "array", "items": {"type": "string", "enum": list(by_id)}, "minItems": 1, "maxItems": 2}})
         msg = [{"role": "system", "content": SYS},
-               {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nOPERATIONS:\n{ops_txt}\n\nSOURCES:\n{catalog}\n\n"
+               {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nOPERATIONS:\n{ops_txt}\n\n{EXAMPLES}\n\nSOURCES:\n{catalog}\n\n"
                                            "Choose the operation that answers the main calculation in the question, and the source(s) holding the data "
-                                           "(two sources only for ratio or compare_keys across files). Reply as JSON."}]
+                                           "(two sources only for ratio or compare_keys across files). Match the measure exactly (e.g. passenger vs vehicle, "
+                                           "current vs constant prices). If several tables hold the same measure, prefer the main summary table with the fewest items. Reply as JSON."}]
 
         def v1(o):
             if o["operation"] not in OPS:
@@ -342,8 +387,10 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                     "record_lookup": {"csv", "geo"}, "count_blank": {"csv", "geo"}, "compare_keys": {"csv", "geo"}, "area": {"geo"}, "explain": None}[o["operation"]]
             if need and not kinds <= need:
                 raise Fail(f"operation {o['operation']} needs a source of kind {sorted(need)}, got {sorted(kinds)}")
+            if o["operation"] in ("record_lookup", "area") and not id_candidates(question, ss[0]):
+                raise Fail(f"no identifier from the question occurs in {clean_name(ss[0].file)}; choose the source that contains it")
             return o
-        plan = _ask_json(llm, led, msg, sch, "plan", v1)
+        plan = _ask_json(llm, led, msg, sch, "plan", v1, think=getattr(llm, "think_plan", False))
         op, ss = plan["operation"], [by_id[x] for x in plan["sources"]]
         trace["plan"] = {"op": op, "sources": [s.desc[:90] for s in ss]}
         ex = Exec(context)
@@ -353,7 +400,10 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         labels = sorted({part for t in tabs for e in t.entities for part in e.split(" / ")})
         if tabs and any(re.search(r"[^\x00-\x7f]", x) for x in labels) and len(labels) <= 150:
             gs = _enum_schema({x: {"type": "string"} for x in labels})
-            gm = [{"role": "user", "content": "Translate each spreadsheet label to short English (keep place names). Labels:\n" + "\n".join(labels) + "\nReply as JSON {label: english}."}]
+            ctx_names = "; ".join(sorted({f"table '{t.title}' in file '{clean_name(t.file)}'" for t in tabs}))
+            gm = [{"role": "user", "content": f"These are row/block labels from {ctx_names}. Translate each label to short English. "
+                                              "Keep place names (cities, regions) unchanged. If a label is an abbreviation, expand it if the file name "
+                                              "or title makes its meaning clear. Labels:\n" + "\n".join(labels) + "\nReply as JSON {label: english}."}]
             try:
                 gloss = _ask_json(llm, led, gm, gs, "gloss", lambda o: {k: str(v) for k, v in o.items() if k in labels}, tries=1, max_tokens=900)
             except Fail:
@@ -389,7 +439,9 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                    "share": "For each part/whole pair pick the part item and the matching whole (total) item of the SAME group, and the period.",
                    "ratio": "Pick the numerator item and period, and the denominator item and period."}[op]
             bm = [{"role": "system", "content": SYS},
-                  {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\n{listing}\n\n{how} Use labels exactly as listed. Reply as JSON."}]
+                  {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\n{listing}\n\n{how} Choose ONLY the items the question "
+                                              "names (usually 1-3); never add others. An area-wide or regional total is the block named for that area, not one of its cities. "
+                                              "Use labels exactly as listed. Reply as JSON."}]
 
             def vb(o):
                 if op == "change" and o["period_from"] == o["period_to"]:
@@ -405,7 +457,7 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                 # dry-run: every value must resolve to a number
                 run_table_op(op, o, ss, Exec(context), gloss)
                 return o
-            b = _ask_json(llm, led, bm, bs, "bind", vb)
+            b = _ask_json(llm, led, bm, bs, "bind", vb, think=getattr(llm, "think_plan", False))
             trace["bind"] = b
             if op == "explain":
                 for e in b["entities"]:
@@ -417,11 +469,13 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         elif op in ("record_lookup", "count_blank", "compare_keys", "area") or (op == "explain" and not tabs):
             s0 = ss[0]
             C = s0.columns
+            ids = id_candidates(question, s0) if op in ("record_lookup", "area") else []
             if op == "record_lookup":
-                bs = _enum_schema({"key_column": {"type": "string", "enum": C}, "key_value": {"type": "string"},
+                bs = _enum_schema({"record": {"type": "string", "enum": ids},
                                    "fields": {"type": "array", "items": {"type": "string", "enum": C}, "minItems": 1, "maxItems": 6},
                                    "days_between": {"type": "array", "items": {"type": "string", "enum": C}, "maxItems": 2}})
-                how = "Pick the key column and the key value (copied from the question), the fields to report, and, if the question asks for days between two dates, the two date fields in chronological order (else an empty list)."
+                how = ("Pick the record identifier (column = value) the question is about, the fields to report, and, if the question asks for days "
+                       "between two dates, the two date fields in chronological order (else an empty list).")
             elif op == "count_blank":
                 bs = _enum_schema({"column": {"type": "string", "enum": C}})
                 how = "Pick the column whose empty values must be counted."
@@ -430,9 +484,9 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                 bs = _enum_schema({"column_a": {"type": "string", "enum": C}, "column_b": {"type": "string", "enum": C2}})
                 how = f"Pick the key column in the first file ({clean_name(s0.file)}) and in the second file ({clean_name(ss[-1].file)})."
             elif op == "area":
-                bs = _enum_schema({"id_field": {"type": "string", "enum": C}, "id_value": {"type": "string"},
+                bs = _enum_schema({"feature": {"type": "string", "enum": ids},
                                    "crs": {"type": "string", "enum": list(CRS)}, "unit": {"type": "string", "enum": list(AREA_UNITS)}})
-                how = "Pick the identifier field and value (copied from the question), the coordinate system the question or Context asks for, and the area unit."
+                how = "Pick the feature identifier (column = value) the question is about, the coordinate system the question or Context asks for, and the area unit."
             else:
                 bs, how = None, ""
             sample = ""
@@ -447,12 +501,15 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                       {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nFILE {clean_name(s0.file)} columns: {', '.join(C)}\n{sample}\n{how} Reply as JSON."}]
 
                 def vb(o):
+                    for k_in, (kc, kv) in (("record", ("key_column", "key_value")), ("feature", ("id_field", "id_value"))):
+                        if k_in in o:
+                            o[kc], o[kv] = o.pop(k_in).split(" = ", 1)
                     if op == "area":
                         run_area(o, s0, Exec(context))
                     else:
                         run_record_op(op, o, ss, Exec(context))
                     return o
-                b = _ask_json(llm, led, bm, bs, "bind", vb)
+                b = _ask_json(llm, led, bm, bs, "bind", vb, think=getattr(llm, "think_plan", False))
                 trace["bind"] = b
                 facts, keys = run_area(b, s0, ex) if op == "area" else run_record_op(op, b, ss, ex)
         # ---- call 4: write the answer
@@ -467,8 +524,16 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             ans = out["text"].strip()
         except BudgetExceeded:
             ans = ""
-        cand = numbers(ans)
-        missing = [k for k in keys if not any(abs(float(k.replace(",", "")) - c) < 1e-9 for c in cand)]
+        miss = lambda a: [k for k in keys if not any(abs(float(k.replace(",", "")) - c) < 1e-9 for c in numbers(a))]
+        missing = miss(ans)
+        if keys and missing:
+            try:
+                out = llm.chat(wm + [{"role": "assistant", "content": ans}, {"role": "user", "content": f"Your answer dropped or changed these exact numbers: {', '.join(missing)}. Rewrite it so each appears exactly as given."}],
+                               led, think=False, profile="write", max_tokens=350, tag="write_fix")
+                if not miss(out["text"]):
+                    ans, missing = out["text"].strip(), []
+            except BudgetExceeded:
+                pass
         if keys and missing:
             trace["write_fallback"] = {"missing": missing, "model_answer": ans}
             ans = " ".join(_strip_cells(x) for x in facts)
