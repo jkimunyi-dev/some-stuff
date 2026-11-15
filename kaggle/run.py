@@ -11,6 +11,7 @@ MODELS = ["qwen3.5:2b"]  # user choice; must be <= 3B total parameters (checked 
 PROFILES = {  # selected by the kernel's first argument; real end-to-end Qwen runs only
     "full": [("qwen_dev", ["--split", "dev", "--workers", "4"]), ("qwen_dev_think", ["--split", "dev", "--think", "--workers", "4"])],
     "fast": [("qwen_dev", ["--split", "dev", "--workers", "4"])],
+    "submit": [("SUBMIT", [])],
     "confirm": [("qwen_dev", ["--split", "dev", "--workers", "4"]), ("qwen_holdout", ["--split", "holdout", "--workers", "4"])],
 }
 RUNS = PROFILES[sys.argv[1] if len(sys.argv) > 1 else "full"]
@@ -71,6 +72,9 @@ for MODEL in MODELS:
         continue
     tag = MODEL.replace(":", "_").replace(".", "")
     for name, args in RUNS:
+        if name == "SUBMIT":  # all 600 Test questions (inference only), resumable, validated, budget-audited
+            sh(f"cd {REPO} && python -u -m qa.submit --sources {SRC} --data {DATA} --model {MODEL} --workers 4 --out /kaggle/working/submission_{tag}.md 2>&1 | tail -40")
+            continue
         sh(f"cd {REPO} && python -u -m qa.run_dev --sources {SRC} --data {DATA} --model {MODEL} {' '.join(args)} --out /kaggle/working/{name}_{tag}.json 2>&1")
     sh(f"ollama stop {MODEL}")
 (OUT / "MODEL.json").write_text(json.dumps(meta, indent=1))

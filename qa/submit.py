@@ -90,6 +90,7 @@ def main():
     ap.add_argument("--model", default="qwen3.5:2b")
     ap.add_argument("--think", action="store_true")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--workers", type=int, default=1)
     a = ap.parse_args()
     test = pd.read_csv(Path(a.data) / "Test.csv")
     order = list(test.ID)
@@ -104,16 +105,28 @@ def main():
     todo = [r for r in test.itertuples() if r.ID not in done]
     if a.limit:
         todo = todo[: a.limit]
-    with ck.open("a", encoding="utf-8") as fh:
-        for i, r in enumerate(todo):
-            t0 = time.time()
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    lock = threading.Lock()
+
+    def one(r):
+        t0 = time.time()
+        try:
             res = answer(llm, r.Question, r.Context, files_for(json.loads(r.Source_IDs), Path(a.sources)))
-            row = {"id": r.ID, "domain": r.Domain, "answer": res["answer"], "evidence": res["evidence"], "error": res["error"],
-                   "ledger": res["ledger"], "op": res["trace"].get("plan", {}).get("op")}
+        except Exception as e:  # never lose the run to one question
+            res = {"answer": "", "evidence": [], "error": f"crash: {type(e).__name__}: {e}", "ledger": {"calls": 0, "tokens": 0, "seconds": 0}, "trace": {}}
+        row = {"id": r.ID, "domain": r.Domain, "question": r.Question, "answer": res["answer"], "evidence": res["evidence"], "error": res["error"],
+               "ledger": res["ledger"], "op": res["trace"].get("plan", {}).get("op"), "facts": res.get("facts", []),
+               "trace": {k: v for k, v in res["trace"].items() if k in ("plan", "bind", "passages", "named_files")}}
+        with lock:
             done[r.ID] = row
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+            fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
             fh.flush()
             print(f"[{len(done)}/{len(order)}] {r.ID[:8]} {r.Domain} op={row['op']} {res['ledger']} err={res['error']} ({time.time() - t0:.0f}s)", flush=True)
+
+    with ck.open("a", encoding="utf-8") as fh:
+        with ThreadPoolExecutor(max(1, a.workers)) as pool:
+            list(pool.map(one, todo))
     rows = list(done.values())
     md = render(rows, order)
     errs = validate(md, order)
