@@ -22,6 +22,7 @@ from .cards import guide_text, is_guide
 from .llm import LLM, BudgetExceeded, Ledger
 from .score import numbers
 from .tables import Table, clean_name, sheet_text, workbook_tables
+from .query import AGGS, FILTER_OPS, QueryError, json_records, profile, run_query, sheet_records, value_hits
 from .textqa import TEXT_SUFFIXES, Index
 from .tools import Ods, Recorder, Xlsx, days_between, read_table, round_half_up
 
@@ -40,6 +41,7 @@ OPS = {
     "ratio": "divide one total by another, possibly from two different tables (e.g. 'average distance per journey' = passenger-kilometres / journeys)",
     "record_lookup": "find ONE record by an identifier mentioned in the question (e.g. an order or zone reference) and report its fields; optionally days between two of its dates",
     "count_blank": "how many records have an empty/missing value in a column, and the total number of records",
+    "table_query": "count / sum / average / min / max / distinct / duplicates over the RECORDS of a table, optionally filtered (e.g. value > 0, category = X) and grouped (e.g. per street, per type, top N)",
     "compare_keys": "compare identifier values between two files (values present in only one file, duplicates in each)",
     "area": "area of one polygon identified in the question, computed in a stated coordinate system",
     "explain": "the question asks whether the data SUPPORTS something or what a symbol/flag means (e.g. whether '[z]' entries can be treated as zero); no calculation",
@@ -54,6 +56,8 @@ EXAMPLES = """EXAMPLES (question -> operation):
 - "What were the start and end dates of record R17, and how many days apart?" -> record_lookup
 - "What is the area of polygon P-4 in hectares?" -> area
 - "How many rows have no end_date?" -> count_blank
+- "How many trees have height 0, and which genus is most common on street S?" -> table_query
+- "What is the total cost of the areas of type T, and how many records are there per category?" -> table_query
 - "Can we treat the '[x]' entries as zero?" -> explain
 - "Which licence does the publisher metadata give, and who publishes it?" -> text_answer"""
 
@@ -67,6 +71,8 @@ class Source:
     desc: str
     table: Table | None = None
     columns: list[str] = field(default_factory=list)
+    sheet: str | None = None  # record table read from a workbook sheet
+    json_path: str | None = None  # record table read from a JSON array
 
 
 def _geo_fields(p: Path):
@@ -75,7 +81,25 @@ def _geo_fields(p: Path):
     return list(info["fields"]), str(info.get("crs") or ""), int(info.get("features") or 0), str(info.get("geometry_type") or "")
 
 
+_SRC_CACHE: dict = {}
+_IDX_CACHE: dict = {}
+
+
+def text_index(files: list[Path]) -> Index:
+    key = tuple(sorted(map(str, files)))
+    if key not in _IDX_CACHE:  # one index per pack, reused by every question of that pack
+        _IDX_CACHE[key] = Index(files)
+    return _IDX_CACHE[key]
+
+
 def build_sources(files: list[Path]) -> list[Source]:
+    key = tuple(sorted(map(str, files)))
+    if key not in _SRC_CACHE:
+        _SRC_CACHE[key] = _build_sources(files)
+    return _SRC_CACHE[key]
+
+
+def _build_sources(files: list[Path]) -> list[Source]:
     out: list[Source] = []
 
     def add(kind, f, desc, **kw):
@@ -85,8 +109,25 @@ def build_sources(files: list[Path]) -> list[Source]:
         suf, name = f.suffix.lower(), clean_name(f)
         try:
             if suf in (".xlsx", ".ods"):
-                for t in workbook_tables(f):
+                tabs_here = workbook_tables(f)
+                for t in tabs_here:
                     add("table", f, t.describe(), table=t)
+                with_tables = {t.sheet for t in tabs_here}
+                try:
+                    sheets = pd.ExcelFile(f).sheet_names
+                except Exception:
+                    sheets = []
+                for sh in sheets:  # sheets without a period layout may still be record tables with a header row
+                    if sh in with_tables or SKIP_REC_SHEET.search(sh):
+                        continue
+                    try:
+                        df, hr = sheet_records(f, sh)
+                    except Exception:
+                        df = None
+                    if df is not None and len(df) >= 3:
+                        _DF_CACHE[(f, sh)] = df
+                        add("csv", f, f"[{name} | sheet {sh}] record table, {len(df)} rows, columns: {', '.join(map(str, df.columns[:25]))}",
+                            columns=[str(c) for c in df.columns], sheet=sh)
             elif suf in (".csv", ".tsv") or (suf == ".txt" and not is_guide(f) and f.stat().st_size < 50_000_000 and "," in f.open(encoding="utf-8-sig", errors="ignore").readline()):
                 df = read_table(f, nrows=200)
                 wkt = r"^\s*((?:MULTI)?(?:POINT|POLYGON|LINESTRING))"
@@ -98,6 +139,16 @@ def build_sources(files: list[Path]) -> list[Source]:
                 flds, crs, n, gt = _geo_fields(f)
                 fmt = {".gpkg": "GeoPackage", ".geojson": "GeoJSON", ".shp": "Shapefile", ".gml": "GML"}[suf]
                 add("geo", f, f"[{name}] {fmt} geographic layer of {gt or '?'} geometries, {n} features, CRS {crs or '?'}, fields: {', '.join(flds[:25])}", columns=flds)
+            elif suf == ".json" and f.stat().st_size < 200_000_000:
+                try:
+                    df, jp = json_records(f)
+                except Exception:
+                    df, jp = None, None
+                if df is not None and len(df) >= 3 and len(df.columns) >= 2:
+                    _DF_CACHE[(f, jp)] = df
+                    add("csv", f, f"[{name}] JSON records at {jp}: {len(df)} records, columns: {', '.join(map(str, df.columns[:25]))}",
+                        columns=[str(c) for c in df.columns], json_path=jp)
+                add("text", f, f"[{name}] JSON document (metadata/text)")
             elif is_guide(f) or suf in TEXT_SUFFIXES:
                 snippet = re.sub(r"\s+", " ", guide_text(f))[:300] if is_guide(f) else ""
                 add("text", f, f"[{name}] document/notes" + (f": {snippet}" if snippet else ""))
@@ -147,9 +198,15 @@ def _ask_json(llm: LLM, led: Ledger, msgs: list[dict], schema: dict, tag: str, v
 
 
 _DF_CACHE: dict = {}
+SKIP_REC_SHEET = re.compile(r"cover|contents|^notes?$|about|readme|metadata", re.I)
 
 
 def load_df(s: Source) -> pd.DataFrame:
+    if s.sheet or s.json_path:
+        key = (s.file, s.sheet or s.json_path)
+        if key not in _DF_CACHE:
+            _DF_CACHE[key] = sheet_records(s.file, s.sheet)[0] if s.sheet else json_records(s.file)[0]
+        return _DF_CACHE[key]
     if s.file not in _DF_CACHE:
         if s.kind == "geo":
             import geopandas as gpd
@@ -278,12 +335,8 @@ def run_table_op(op, b, srcs, ex: Exec, gloss: dict):
 def run_record_op(op, b, srcs, ex: Exec):
     facts, keys = [], []
     s = srcs[0]
-    if s.kind == "geo":
-        import geopandas as gpd
-        df = gpd.read_file(s.file).drop(columns="geometry")
-    else:
-        df = read_table(s.file)
-    name = clean_name(s.file)
+    df = load_df(s)
+    name = clean_name(s.file) + (f" sheet {s.sheet}" if s.sheet else "") + (f" {s.json_path}" if s.json_path else "")
     if op == "record_lookup":
         kc, kv = b["key_column"], str(b["key_value"]).strip()
         m = df[df[kc].astype(str).str.strip() == kv]
@@ -319,7 +372,7 @@ def run_record_op(op, b, srcs, ex: Exec):
         ex.rec.add(f"{name}, {c} column")
     elif op == "compare_keys":
         s2 = srcs[-1]
-        df2 = read_table(s2.file) if s2.kind == "csv" else __import__("geopandas").read_file(s2.file)
+        df2 = load_df(s2)
         a = df[b["column_a"]].astype(str).str.strip()
         c = df2[b["column_b"]].astype(str).str.strip()
         only_a, only_b = sorted(set(a) - set(c)), sorted(set(c) - set(a))
@@ -459,7 +512,7 @@ def format_evidence(items: list[str], facts: list[str], files: list[Path]) -> li
     sid = {clean_name(f): f.name.split("__")[0] for f in files}
     out = []
     for it in items:
-        name = it.split(",")[0].strip()
+        name = next((n for n in sorted(sid, key=len, reverse=True) if it.startswith(n)), it.split(",")[0].strip())
         cell = re.search(r"cell ([A-Z]{1,3}\d+)", it)
         claim = next((f for f in facts if cell and cell.group(1) in f), facts[0] if facts else "")
         out.append(f"{sid.get(name, name)} | {_one_line(it)} | {_one_line(_strip_cells(claim))[:180]}")
@@ -507,6 +560,7 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             kinds = {s.kind for s in ss}
             need = {"value": {"table"}, "change": {"table"}, "percent_of": {"table"}, "share": {"table"}, "ratio": {"table"},
                     "record_lookup": {"csv", "geo"}, "count_blank": {"csv", "geo"}, "compare_keys": {"csv", "geo"}, "area": {"geo"}, "explain": None,
+                    "table_query": {"csv", "geo"},
                     "text_answer": None}[o["operation"]]
             if need and not kinds <= need:
                 raise Fail(f"operation {o['operation']} needs a source of kind {sorted(need)}, got {sorted(kinds)}")
@@ -690,6 +744,46 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                         facts.append(f"{_label(e, gloss)} in {p}: {v!r} (cell {a1})")
             else:
                 facts, keys = run_table_op(op, b, ss, ex, gloss)
+        elif op == "table_query":
+            s0 = ss[0]
+            df = load_df(s0)
+            C = [str(c) for c in df.columns]
+            hits = value_hits(df, question)
+            name = clean_name(s0.file) + (f" sheet {s0.sheet}" if s0.sheet else "")
+            fsch = _enum_schema({"column": {"type": "string", "enum": C}, "op": {"type": "string", "enum": FILTER_OPS},
+                                 "value": {"type": "string", "maxLength": 120}})
+            bs = _enum_schema({"reasoning": {"type": "string", "maxLength": 200, "description": "one short sentence: which records, which measure"},
+                               "filters": {"type": "array", "items": fsch, "maxItems": 4},
+                               "group_by": {"type": "string", "enum": [""] + C}, "aggregate": {"type": "string", "enum": AGGS},
+                               "target": {"type": "string", "enum": [""] + C}, "sort": {"type": "string", "enum": ["desc", "asc"]},
+                               "top": {"type": "integer", "minimum": 1, "maximum": 20}})
+            hint = ("Values from the question found in the data: " + "; ".join(hits) + "\n") if hits else ""
+            bm = [{"role": "system", "content": SYS},
+                  {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nTABLE {name}\nColumns:\n{profile(df)}\n{hint}\n"
+                                              "Build the query: filters select the records the question is about (op is_blank/not_blank need no value; "
+                                              "use '=' with a value exactly as it appears in the data); aggregate is what to compute "
+                                              "(count needs no target); group_by only if the question asks per category or for the most/least common; "
+                                              "top = how many groups to report. Reply as JSON."}]
+
+            def vq(o):
+                o.pop("reasoning", None)
+                for f_ in o.get("filters") or []:
+                    if f_["op"] in ("is_blank", "not_blank"):
+                        f_["value"] = ""
+                if o["aggregate"] != "count" and not o.get("target"):
+                    if o.get("group_by") and o["aggregate"] in ("count_distinct", "list_values"):
+                        o["target"] = o["group_by"]
+                    else:
+                        raise Fail(f"aggregate {o['aggregate']} needs a target column")
+                try:
+                    run_query(df, o, name)
+                except QueryError as e:
+                    raise Fail(str(e))
+                return o
+            b = _ask_json(llm, led, bm, bs, "bind", vq, think=getattr(llm, "think_plan", False))
+            trace["bind"] = b
+            facts, keys, loc = run_query(df, b, name)
+            ex.rec.add(loc)
         elif op in ("record_lookup", "count_blank", "compare_keys", "area") or (op == "explain" and not tabs):
             s0 = ss[0]
             C = s0.columns
@@ -742,9 +836,9 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         if op in ("text_answer", "explain"):
             chosen = [s.file for s in ss if s.kind == "text"]
             others = [s.file for s in pool if s.kind == "text" and s.file not in chosen]
-            found = Index(chosen).search(f"{question} {context}", k=6) if chosen else []
+            found = text_index(chosen).search(f"{question} {context}", k=6) if chosen else []
             if len(found) < 3 and others:
-                found += Index(others).search(f"{question} {context}", k=6 - len(found))
+                found += text_index(others).search(f"{question} {context}", k=6 - len(found))
             trace["passages"] = [f"{clean_name(x.file)} | {x.locator}" for x in found]
         # ---- call 4: write the answer
         ctx_txt = explain_context(ss, srcs) if op == "explain" else ""
