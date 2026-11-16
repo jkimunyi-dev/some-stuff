@@ -7,7 +7,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 OUT = Path("/kaggle/working")
-MODELS = ["qwen3.5:2b"]  # user choice; must be <= 3B total parameters (checked below)
+MODELS = sys.argv[2].split(",") if len(sys.argv) > 2 else ["qwen3.5:2b"]  # kernel arg 2 overrides; must be <= 3B total parameters (checked below)
 PROFILES = {  # selected by the kernel's first argument; real end-to-end Qwen runs only
     "full": [("qwen_dev", ["--split", "dev", "--workers", "4"]), ("qwen_dev_think", ["--split", "dev", "--think", "--workers", "4"])],
     "fast": [("qwen_dev", ["--split", "dev", "--workers", "4"])],

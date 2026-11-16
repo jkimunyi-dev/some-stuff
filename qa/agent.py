@@ -27,7 +27,7 @@ from .transit_op import MODELS as TRANSIT_MODELS, TASKS as TRANSIT_TASKS, Transi
 from .gtfs import LOCATION_TYPES
 from .spatial_op import TASKS as SPATIAL_TASKS, SpatialError, anchor_options, run_spatial, stated_crs
 from .memory import Memory
-from .query import AGGS, FILTER_OPS, QueryError, json_records, profile, run_query, sheet_records, value_hits
+from .query import AGGS, FILTER_OPS, QueryError, check_query, json_records, profile, run_query, sheet_records, value_hits
 from .textqa import TEXT_SUFFIXES, Index
 from .tools import Ods, Recorder, Xlsx, days_between, read_table, round_half_up
 
@@ -113,8 +113,8 @@ def key_lock(key) -> threading.Lock:
 def clear_caches() -> None:
     """Free every per-pack cache (record tables, point clouds, layers, feeds, indexes). Called between packs."""
     import gc
-    from . import spatial_op, transit_op
-    for c in (_DF_CACHE, _SRC_CACHE, _IDX_CACHE, spatial_op._LAYERS, transit_op._FEEDS, _LOCKS):
+    from . import query, spatial_op, transit_op
+    for c in (_DF_CACHE, _SRC_CACHE, _IDX_CACHE, spatial_op._LAYERS, transit_op._FEEDS, _LOCKS, query._TYPES):
         c.clear()
     gc.collect()
 
@@ -781,7 +781,19 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             if o["operation"] == "transit" and feed_for(files) is None:
                 raise Fail("transit needs a GTFS feed (stops.txt, trips.txt, ...) in the sources; choose another operation")
             if o["operation"] in ("record_lookup", "area") and not id_candidates(question, ss[0]):
-                raise Fail(f"no identifier from the question occurs in {clean_name(ss[0].file)}; choose the source that contains it")
+                # code picks the source that holds the identifier instead of asking the model to guess again
+                want = {"area": {"geo"}}.get(o["operation"], {"csv", "geo"})
+                cands = [x for x in rank_sources([x for x in pool if x.kind in want and x is not ss[0]], f"{question} {context}", 12)
+                         if id_candidates(question, x)]
+                if cands:
+                    trace["op_repair"] = f"{o['operation']}: identifier not in {ss[0].sid} -> {cands[0].sid}"
+                    o["sources"] = [cands[0].sid]
+                    ss = [cands[0]]
+                elif o["operation"] == "record_lookup" and recs:
+                    raise Fail(f"no source contains an identifier from the question, so record_lookup cannot work; use table_query "
+                               f"(filter the records the question describes) or text_answer")
+                else:
+                    raise Fail(f"no identifier from the question occurs in {clean_name(ss[0].file)}; choose the source that contains it")
             return o
         plan = _ask_json(llm, led, msg, sch, "plan", v1, think=getattr(llm, "think_plan", False))
         op, ss = plan["operation"], [by_id[x] for x in plan["sources"]]
@@ -1060,6 +1072,9 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                     else:
                         raise Fail(f"aggregate {o['aggregate']} needs a target column")
                 try:
+                    notes = check_query(df, o)  # strict per-column type check: all problems reported at once, clear fixes
+                    if notes:
+                        trace.setdefault("query_fixes", []).extend(notes)
                     run_query(df, o, name)
                 except QueryError as e:
                     raise Fail(str(e))

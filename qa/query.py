@@ -96,7 +96,8 @@ def profile(df: pd.DataFrame, max_cols: int = 40) -> str:
         else:
             vc = s[~is_blank_series(s)].astype(str).value_counts()
             ex = ", ".join(f"{v[:30]!r} ({n})" for v, n in vc.head(6).items())
-            lines.append(f"- {c}: {vc.size} distinct, blanks {blank}; top: {ex}")
+            t = col_type(df, c)
+            lines.append(f"- {c}: {'date' if t == 'date' else 'JSON' if t == 'json' else 'text'}, {vc.size} distinct, blanks {blank}; top: {ex}")
     return "\n".join(lines)
 
 
@@ -126,6 +127,186 @@ def value_hits(df: pd.DataFrame, question: str, limit: int = 12) -> list[str]:
     return out[:limit]
 
 
+# ---------------------------------------------------------------- strict type checking of a model-built query
+_TYPES: dict = {}
+_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?")
+
+
+def col_type(df: pd.DataFrame, c: str) -> str:
+    """numeric | date | json | text (cached per table and column; decided on a sample of non-blank values)."""
+    key = (id(df), len(df), c)
+    if key not in _TYPES:
+        s = df[c]
+        if pd.api.types.is_numeric_dtype(s):
+            t = "numeric"
+        else:
+            v = s[~is_blank_series(s)]
+            v = v.sample(min(len(v), 5000), random_state=0) if len(v) > 5000 else v
+            sv = v.astype(str).str.strip()
+            if not len(sv):
+                t = "text"
+            elif to_num(sv).notna().mean() > 0.9:
+                t = "numeric"
+            elif sv.str.match(_ISO).mean() > 0.9:
+                t = "date"
+            elif sv.str[:1].isin(["[", "{"]).mean() > 0.5:
+                t = "json"
+            else:
+                t = "text"
+        _TYPES[key] = t
+    return _TYPES[key]
+
+
+def _norm(x: str) -> str:
+    return re.sub(r"[^0-9a-zà-ÿ]+", "", str(x).lower())
+
+
+def snap_value(s: pd.Series, v: str) -> str | None:
+    """The single data value the model clearly meant (quotes/punctuation/case differences, truncation, small typos), else None."""
+    vals = list(pd.Series(s[~is_blank_series(s)].astype(str).str.strip().unique()))
+    if len(vals) > 200_000:
+        return None
+    nv = _norm(v)
+    if not nv:
+        return None
+    same = [x for x in vals if _norm(x) == nv]
+    if len(same) == 1:
+        return same[0]
+    if len(nv) >= 8:
+        pre = [x for x in vals if _norm(x).startswith(nv)]
+        if len(pre) == 1:
+            return pre[0]
+    if len(nv) < 5:  # short values: no fuzzy guessing ('1' must not become '14')
+        return None
+    close = difflib.get_close_matches(v.lower(), [x.lower() for x in vals[:20000]], n=2, cutoff=0.88)
+    if len(close) == 1 or (len(close) == 2 and difflib.SequenceMatcher(None, v.lower(), close[0]).ratio()
+                           - difflib.SequenceMatcher(None, v.lower(), close[1]).ratio() > 0.05):
+        return next(x for x in vals if x.lower() == close[0])
+    return None
+
+
+def check_query(df: pd.DataFrame, q: dict) -> list[str]:
+    """Validate every field of a query against the table's column types; fix what is unambiguous (snapped filter values) in
+    place and return notes about the fixes. Raises QueryError listing ALL problems at once, each with what is allowed."""
+    errs, notes = [], []
+    cols = [str(c) for c in df.columns]
+
+    def known(c, where):
+        if c in df.columns:
+            return True
+        near = difflib.get_close_matches(str(c), cols, n=3, cutoff=0.5)
+        errs.append(f"{where}: unknown column {c!r}" + (f"; did you mean {near}?" if near else ""))
+        return False
+
+    for i, f in enumerate(q.get("filters") or []):
+        c, op = f.get("column"), f.get("op")
+        v = str(f.get("value", "") or "").strip()
+        m_ = re.fullmatch(r"(.+?)\s*\(\d[\d,]*\)", v)  # copied from the profile's top list: 'value' (count)
+        if m_ and re.fullmatch(r"(['\"`]).*\1", m_.group(1).strip()):
+            v = m_.group(1).strip()
+        while len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"`":
+            v = v[1:-1].strip()
+        m_ = re.fullmatch(r"(<=|>=|<|>|=)\s*(-?[\d.,]+)", v)  # '<16' written into the value: move the operator out
+        if m_ and op == "=":
+            op, v = m_.group(1), m_.group(2)
+            f["op"] = op
+            notes.append(f"filter on {c}: operator {op} taken from the value")
+        f["value"] = v
+        w = f"filters[{i}] ({c} {op} {v!r})"
+        if not known(c, w):
+            continue
+        if op in ("is_blank", "not_blank"):
+            f["value"] = ""
+            continue
+        if not v:
+            errs.append(f"{w}: op {op!r} needs a value (or use is_blank / not_blank)")
+            continue
+        t = col_type(df, c)
+        if t == "numeric":
+            if op in ("contains", "not_contains"):
+                errs.append(f"{w}: {c} is a NUMERIC column; use =, !=, <, <=, >, >= with a plain number")
+                continue
+            y = pd.to_numeric(v.replace(",", "").replace(" ", ""), errors="coerce")
+            if pd.isna(y):
+                x = to_num(df[c])
+                errs.append(f"{w}: {c} is a NUMERIC column (values {x.min():g} to {x.max():g}); the value must be one plain number such as "
+                            f"{x.median():g}, not {v!r}. To select records by a word or label, filter a TEXT column instead")
+                continue
+            if pd.api.types.is_numeric_dtype(df[c]):
+                f["value"] = str(y)
+        elif t == "json":
+            if op in ("=", "!="):
+                s_ = df[c].astype(str).str.strip()
+                if (s_ == v).any():
+                    continue
+                toks = sorted(re.findall(r"[\w.:-]{4,}", v), key=len, reverse=True)  # key text inside the JSON the model wrote
+                toks = [x for x in toks if x not in ("id", "type", "name", "value")]
+                if toks and s_.str.contains(re.escape(toks[0]), na=False).any():
+                    f["op"], f["value"] = ("contains" if op == "=" else "not_contains"), toks[0]
+                    notes.append(f"{c} holds JSON; '{op} {v[:40]}' changed to {f['op']} {toks[0]!r}")
+                    continue
+                errs.append(f"{w}: {c} holds JSON lists/objects; use contains / not_contains with the text to find inside them")
+                continue
+        if t == "date" and not _ISO.match(v):  # '16 January 2012', '03/04/2025' -> ISO (day first, as in European sources)
+            d_ = pd.to_datetime(v, errors="coerce", dayfirst=True)
+            if not pd.isna(d_):
+                iso = d_.strftime("%Y-%m-%d")
+                notes.append(f"date {v!r} written as {iso}")
+                v = f["value"] = iso
+        if t in ("numeric", "json"):
+            pass
+        elif op in (">", ">=", "<", "<="):
+            if t == "date" and not _ISO.match(v):
+                errs.append(f"{w}: {c} is a DATE column (YYYY-MM-DD); compare with a date written like 2024-03-31, not {v!r}")
+                continue
+            if t == "text" and pd.isna(pd.to_numeric(v.replace(",", ""), errors="coerce")):
+                errs.append(f"{w}: {c} is a TEXT column; <, >, <=, >= need a number or a YYYY-MM-DD date. Use = or contains for text")
+                continue
+        if op in ("=", "!=") and t == "date" and re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+            ss = df[c].astype(str).str.strip()
+            if not (ss == v).any():
+                if ss.str.startswith(v).any():  # date-only value on a date-time column: match the whole day
+                    f["op"] = "starts_with" if op == "=" else "not_starts_with"
+                    notes.append(f"{c} holds date-times; matching every time on {v}")
+                elif op == "=":
+                    errs.append(f"{w}: no record has {c} on {v}; dates in {c} run from {ss.min()} to {ss.max()}")
+            continue
+        if op in ("=", "!=") and t in ("text", "date"):
+            ss = df[c].astype(str).str.strip().str.lower()
+            if not (ss == v.lower()).any():
+                fix = snap_value(df[c], v)
+                if fix is not None:
+                    notes.append(f"filter value {v!r} matched to the data value {fix!r} in {c}")
+                    f["value"] = fix
+                elif op == "=":
+                    close = difflib.get_close_matches(v, list(df[c].astype(str).str.strip().unique())[:5000], n=5, cutoff=0.5)
+                    errs.append(f"{w}: no record has {c} = {v!r}" + (f"; values that exist: {close}" if close else
+                                f"; use contains with a shorter word, or another column"))
+    agg, tgt, grp = q.get("aggregate"), q.get("target") or "", q.get("group_by") or ""
+    if agg not in AGGS:
+        errs.append(f"aggregate {agg!r} is not one of {AGGS}")
+    if tgt and known(tgt, "target"):
+        t = col_type(df, tgt)
+        if agg in ("sum", "mean", "median") and t != "numeric":
+            numc = [c for c in cols if col_type(df, c) == "numeric"][:12]
+            errs.append(f"target: {agg} needs a NUMERIC column but {tgt} is {t.upper()}; numeric columns: {numc}")
+        elif agg in ("min", "max") and t not in ("numeric", "date"):
+            errs.append(f"target: {agg} needs a NUMERIC or DATE column but {tgt} is {t.upper()}; use count_distinct / list_values for text")
+    elif agg and agg != "count" and not tgt:
+        errs.append(f"target: aggregate {agg} needs a target column")
+    if grp and known(grp, "group_by"):
+        t = col_type(df, grp)
+        if t == "json":
+            errs.append(f"group_by: {grp} holds JSON lists/objects; group by a plain category column")
+        else:
+            nun = df[grp].nunique(dropna=False)
+            if nun > 5000:
+                errs.append(f"group_by: {grp} has {nun:,} distinct values; group by a category column (or filter) instead")
+    if errs:
+        raise QueryError("; ".join(errs))
+    return notes
+
+
 # ---------------------------------------------------------------- execution
 def _mask(df: pd.DataFrame, f: dict) -> pd.Series:
     c, op, v = f["column"], f["op"], str(f.get("value", "")).strip()
@@ -150,6 +331,9 @@ def _mask(df: pd.DataFrame, f: dict) -> pd.Series:
     if op in ("contains", "not_contains"):
         m = s.astype(str).str.contains(re.escape(v), case=False, na=False)
         return m if op == "contains" else ~m
+    if op in ("starts_with", "not_starts_with"):  # set by check_query (date-only value on a date-time column)
+        m = s.astype(str).str.strip().str.startswith(v)
+        return m if op == "starts_with" else ~m
     if op in (">", ">=", "<", "<="):
         x, y = to_num(s), pd.to_numeric(str(v).replace(",", ""), errors="coerce")
         if pd.isna(y):  # dates / strings compare as text (ISO dates sort correctly)
