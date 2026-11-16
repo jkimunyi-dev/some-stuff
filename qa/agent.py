@@ -26,6 +26,7 @@ from .raster_op import TASKS as RASTER_TASKS, RasterError, legend as raster_lege
 from .transit_op import MODELS as TRANSIT_MODELS, TASKS as TRANSIT_TASKS, TransitError, feed_for, run_transit, stop_options, trip_options
 from .gtfs import LOCATION_TYPES
 from .spatial_op import TASKS as SPATIAL_TASKS, SpatialError, anchor_options, run_spatial, stated_crs
+from .memory import Memory
 from .query import AGGS, FILTER_OPS, QueryError, json_records, profile, run_query, sheet_records, value_hits
 from .textqa import TEXT_SUFFIXES, Index
 from .tools import Ods, Recorder, Xlsx, days_between, read_table, round_half_up
@@ -97,6 +98,7 @@ GENERIC_NAME_WORDS = {"data", "dataset", "report", "readme", "guide", "source", 
                       "draft", "version", "copy", "full", "text", "document", "info", "information", "records", "description"}
 _SRC_CACHE: dict = {}
 _IDX_CACHE: dict = {}
+MEMORY = Memory()  # experience memory (methods from approved dev data; never Test answers)
 import threading
 _LOCKS: dict = {}
 _LOCKS_GUARD = threading.Lock()
@@ -252,7 +254,10 @@ def _ask_json(llm: LLM, led: Ledger, msgs: list[dict], schema: dict, tag: str, v
             return validate(obj)
         except (Fail, ValueError, KeyError, TypeError) as e:
             last = f"{type(e).__name__}: {e}"
-            msgs = msgs + [{"role": "assistant", "content": out["text"]}, {"role": "user", "content": f"That is invalid: {last}. Answer again with corrected JSON."}]
+            from .progress import category
+            hint = MEMORY.recovery(category(f"{'bind' if tag.startswith('bind') else 'plan'} failed {last}"))
+            msgs = msgs + [{"role": "assistant", "content": out["text"]},
+                           {"role": "user", "content": f"That is invalid: {last}." + (f" Hint: {hint}" if hint else "") + " Answer again with corrected JSON."}]
     raise Fail(f"{tag} failed after {tries} tries: {last}")
 
 
@@ -660,12 +665,16 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         by_id = {s.sid: s for s in pool}
         catalog = "\n".join(f"{s.sid}: {s.desc}" for s in pool)
         ops_txt = "\n".join(f"- {k}: {v}" for k, v in OPS.items())
+        sim = MEMORY.similar(question, 5)  # experience memory: similar solved patterns (methods, not answers)
+        similar_txt = ("SIMILAR SOLVED QUESTIONS (pattern -> operation):\n" + "\n".join(f'- "{ex}" -> {op}' for _, op, _, ex in sim) + "\n\n") if sim else ""
+        if sim:
+            trace["memory"] = [op for _, op, _, _ in sim]
         # ---- call 1: operation + sources
         sch = _enum_schema({"what_is_asked": {"type": "string", "maxLength": 220, "description": "one short sentence: the quantity asked and, for a ratio, 'numerator: ...; denominator: ...'"},
                             "operation": {"type": "string", "enum": list(OPS)},
                             "sources": {"type": "array", "items": {"type": "string", "enum": list(by_id)}, "minItems": 1, "maxItems": 2}})
         msg = [{"role": "system", "content": SYS},
-               {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nOPERATIONS:\n{ops_txt}\n\n{EXAMPLES}\n\nSOURCES:\n{catalog}\n\n"
+               {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nOPERATIONS:\n{ops_txt}\n\n{EXAMPLES}\n\n{similar_txt}SOURCES:\n{catalog}\n\n"
                                            "Choose the operation that answers the main calculation in the question, and the source(s) holding the data "
                                            "(two sources only for ratio or compare_keys across files). Match the measure exactly (e.g. passenger vs vehicle, "
                                            "current vs constant prices). If several tables hold the same measure, prefer the main summary table with the fewest items. Reply as JSON."}]
