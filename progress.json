@@ -1,17 +1,18 @@
 {
  "label": "submit qwen3.5:2b (isolated packs)",
- "updated_utc": "2026-11-16 09:30:39",
- "elapsed_min": 33.3,
- "done": 349,
+ "updated_utc": "2026-11-16 09:32:12",
+ "elapsed_min": 34.8,
+ "done": 365,
  "total": 600,
- "answered": 297,
+ "answered": 310,
  "by_category": {
-  "answered": 297,
-  "value not found": 16,
+  "answered": 310,
+  "value not found": 17,
   "format check": 1,
-  "bind invalid": 33,
+  "bind invalid": 34,
   "identifier not found": 1,
-  "crash": 1
+  "crash": 1,
+  "op/source mismatch": 1
  },
  "by_domain": {
   "transport": {
@@ -23,20 +24,20 @@
    "answered": 114
   },
   "urban_greenery": {
-   "done": 121,
-   "answered": 102
+   "done": 137,
+   "answered": 115
   }
  },
  "by_op": {
-  "table_query": 142,
-  "explain": 60,
-  "compare_keys": 12,
+  "table_query": 147,
+  "explain": 63,
+  "compare_keys": 13,
   "spatial": 6,
-  "text_answer": 30,
+  "text_answer": 33,
   "area": 4,
   "record_lookup": 6,
   "count_blank": 9,
-  "raster": 10,
+  "raster": 11,
   "transit": 11,
   "percent_of": 2,
   "ratio": 2,
@@ -44,5 +45,5 @@
  },
  "max_calls": 6,
  "max_tokens": 821,
- "note": "pack 17/64 rc=0"
+ "note": "pack 18/64 rc=0"
 }
