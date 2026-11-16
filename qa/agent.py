@@ -305,15 +305,25 @@ MISSING_CLAIM = re.compile(r"\b(?:not (?:provided|available|specified|given|stat
                            r"report|mention|list|give|show)|cannot be (?:determined|calculated|computed|verified|answered)|unavailable|"
                            r"insufficient|is missing|are missing)", re.I)
 
-THINK_BUDGET = 2000  # extra generated tokens per plan/bind call when thinking is on (the ledger still caps 12,000 per question)
+THINK_BUDGET = 1500  # extra generated tokens per plan/bind call when thinking is on (the ledger still caps 12,000 per question)
+THINK_NOTES = 2500  # characters of (possibly truncated) reasoning handed to the answer-only follow-up call
 
 
 def _ask_json(llm: LLM, led: Ledger, msgs: list[dict], schema: dict, tag: str, validate, tries: int = 3, max_tokens: int = 600, think: bool = False):
-    """Call with an enforced JSON schema, parse, validate; feed errors back. Returns validated value."""
+    """Call with an enforced JSON schema, parse, validate; feed errors back. Returns validated value.
+
+    Thinking: Qwen3.5 can spend the whole budget reasoning and return no content (batch 1: 48/50 empty plans). Budget forcing:
+    think once; if no usable JSON came back, ask once more with thinking off, given the reasoning so far. Later retries do not think."""
     last = None
     for k in range(tries):
-        out = llm.chat(msgs, led, think=think, profile="precise" if think else "extract", max_tokens=max_tokens + (THINK_BUDGET if think else 0),
+        th = think and k == 0
+        out = llm.chat(msgs, led, think=th, profile="precise" if th else "extract", max_tokens=max_tokens + (THINK_BUDGET if th else 0),
                        json_mode=schema, tag=f"{tag}{k}")
+        if th and not (out["text"] or "").strip() and (out.get("thinking") or "").strip():
+            notes = out["thinking"].strip()[-THINK_NOTES:]
+            out = llm.chat(msgs + [{"role": "user", "content": "Your reasoning so far (it may be cut off):\n" + notes +
+                                    "\n\nStop reasoning. Output only the JSON answer now."}],
+                           led, think=False, profile="extract", max_tokens=max_tokens, json_mode=schema, tag=f"{tag}{k}_force")
         try:
             obj = json.loads(out["text"])
             return validate(obj)
