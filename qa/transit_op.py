@@ -22,10 +22,51 @@ class TransitError(Exception):
     pass
 
 
+def _zip_feed(zips: list[Path]) -> Path | None:
+    """GTFS feeds shipped as .zip: unpack once into a cache folder; several zips in one pack are concatenated table by
+    table (union of columns, exact duplicate rows dropped), as an analyst merging the files would."""
+    import hashlib
+    import tempfile
+    import zipfile
+    import pandas as pd
+    good = []
+    for z in zips:
+        try:
+            names = {Path(n).name for n in zipfile.ZipFile(z).namelist()}
+        except zipfile.BadZipFile:
+            continue
+        if {"stops.txt", "trips.txt"} <= names:
+            good.append(z)
+    if not good:
+        return None
+    out = Path(tempfile.gettempdir()) / "qa_gtfs" / hashlib.sha1("|".join(sorted(str(z) for z in good)).encode()).hexdigest()[:12]
+    if (out / ".done").exists():
+        return out
+    out.mkdir(parents=True, exist_ok=True)
+    tables: dict[str, list] = {}
+    for z in good:
+        with zipfile.ZipFile(z) as zf:
+            for n in zf.namelist():
+                if n.endswith(".txt"):
+                    with zf.open(n) as fh:
+                        tables.setdefault(Path(n).name, []).append(pd.read_csv(fh, dtype=str, keep_default_na=False, encoding="utf-8-sig"))
+    for name, dfs in tables.items():
+        pd.concat(dfs, ignore_index=True).fillna("").drop_duplicates().to_csv(out / name, index=False)
+    (out / ".done").write_text(",".join(z.name for z in good))
+    return out
+
+
 def feed_for(files: list[Path]) -> Feed | None:
     folder = {f.parent for f in files if re.search(r"__(stops|trips|stop_times)\.txt$", f.name)}
     if not folder:
-        return None
+        zdir = _zip_feed([f for f in files if f.suffix.lower() == ".zip"])
+        if zdir is None:
+            return None
+        key = ("zip", str(zdir))
+        with _FEED_LOCK:
+            if key not in _FEEDS:
+                _FEEDS[key] = Feed(zdir)
+            return _FEEDS[key]
     names = {re.sub(r"^SRC_[0-9a-f]+__", "", f.name) for f in files}
     if not {"stops.txt", "trips.txt"} <= names:
         return None

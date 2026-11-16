@@ -312,6 +312,17 @@ BARE_COUNT_MSG = ("the question does not ask how many records match, so a bare r
                   "for distinct identifiers, list_values to read the matching record's fields, or group_by for which/most/per questions; "
                   "use filters that isolate exactly the record(s) the question names")
 
+# lesson 4: (data kind, operations that use it, question cue, push-back message)
+ROUTES = [
+    ("transit", ("transit",), re.compile(r"\b(depart\w*|arriv\w*|board(?:ing)?|timetabl\w*|itinerar\w*|transfers?|scheduled|active trips?|"
+                                          r"trips? (?:run|operat)\w*|in service|headways?|next (?:bus|train|tram))\b", re.I),
+     "the question is about scheduled trips (departures, arrivals, transfers, service days) and this pack has a GTFS feed: "
+     "use operation transit, which applies the service calendar and stop times"),
+    ("raster", ("raster",), re.compile(r"\b(land[- ]?cover|tree cover|canopy|cells?|pixels?|raster|grid squares?|built[- ]up area|cover(?:age)? class)\b", re.I),
+     "the question is about mapped cover classes, cells or pixels and this pack has a raster map (.tif): use operation raster, "
+     "which counts class cells and converts them to area"),
+]
+
 THINK_BUDGET = 1500  # extra generated tokens per plan/bind call when thinking is on (the ledger still caps 12,000 per question)
 THINK_NOTES = 2500  # characters of (possibly truncated) reasoning handed to the answer-only follow-up call
 
@@ -852,6 +863,16 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                             fit_rejected.append(key)  # one push-back; the model may insist
                             raise Fail(f"{best.sid} ({best.table.id}) matches '{side.strip()[:80]}' better than {chosen.sid} "
                                        f"({chosen.table.id}). Use {best.sid} for that side unless it is really the wrong measure.")
+            # lesson 4: data-kind routing. The question's wording names the kind of computation; the pack holds that kind of data,
+            # but the model chose another operation (batch 2: timetables answered from building files, land cover from boundaries)
+            for kind, ok_ops, cue, why in ROUTES:
+                key = f"route:{kind}"
+                if key in fit_rejected or o["operation"] in ok_ops or not cue.search(question):
+                    continue
+                has = feed_for(files) is not None if kind == "transit" else any(x.kind == kind for x in pool)
+                if has:
+                    fit_rejected.append(key)  # one push-back; the model may insist
+                    raise Fail(why)
             if o["operation"] == "raster" and not any(x.kind == "raster" for x in pool):
                 raise Fail("raster needs a .tif map among the sources; choose another operation")
             if o["operation"] == "transit" and feed_for(files) is None:
