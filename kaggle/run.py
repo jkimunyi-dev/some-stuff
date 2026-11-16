@@ -74,7 +74,8 @@ if RUNS and RUNS[0][0] == "VLLM_DEV":
 # --- ollama
 sh("apt-get -qq install -y zstd pciutils lshw > /dev/null 2>&1")
 sh("curl -fsSL https://ollama.com/install.sh | sh 2>&1 | tail -3")
-subprocess.Popen(f"OLLAMA_NUM_PARALLEL=4 nohup ollama serve > {OUT}/ollama.log 2>&1 &", shell=True)  # 4 concurrent requests
+WORKERS = os.environ.get("QA_WORKERS", "4")  # Colab free tier (12.7 GB RAM): QA_WORKERS=2
+subprocess.Popen(f"OLLAMA_NUM_PARALLEL={WORKERS} nohup ollama serve > {OUT}/ollama.log 2>&1 &", shell=True)  # 4 concurrent requests
 for _ in range(60):
     try:
         urllib.request.urlopen("http://127.0.0.1:11434/api/version", timeout=2)
@@ -100,7 +101,7 @@ for MODEL in MODELS:
     tag = MODEL.replace(":", "_").replace(".", "")
     for name, args in RUNS:
         if name == "SUBMIT":  # all 600 Test questions (inference only), resumable, validated, budget-audited
-            sh(f"cd {REPO} && python -u -m qa.submit --sources {SRC} --data {DATA} --model {MODEL} --workers 4 --isolate {' '.join(args)} --out {OUT}/submission_{tag}.md 2>&1 | grep -E '^===|answered|budget|format|unanswered|errors|max_' | tail -90")
+            sh(f"cd {REPO} && python -u -m qa.submit --sources {SRC} --data {DATA} --model {MODEL} --workers {WORKERS} --isolate {' '.join(args)} --out {OUT}/submission_{tag}.md 2>&1 | grep --line-buffered -E '^===|answered|budget|format|unanswered|errors|max_'")
             continue
         sh(f"cd {REPO} && python -u -m qa.run_dev --sources {SRC} --data {DATA} --model {MODEL} {' '.join(args)} --out {OUT}/{name}_{tag}.json 2>&1")
     sh(f"ollama stop {MODEL}")
