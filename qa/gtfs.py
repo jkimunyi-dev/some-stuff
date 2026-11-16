@@ -29,8 +29,11 @@ class Feed:
 
     # ---- loading: everything as str, BOM-safe, blanks stay "" (never NaN -> 0)
     def t(self, name: str) -> pd.DataFrame:
-        if name not in self._t:
-            self._t[name] = pd.read_csv(self.paths[name], dtype=str, keep_default_na=False, encoding="utf-8-sig")
+        import threading
+        lock = self.__dict__.setdefault("_lock", threading.Lock())
+        with lock:  # parallel questions share one copy of each (possibly large) table
+            if name not in self._t:
+                self._t[name] = pd.read_csv(self.paths[name], dtype=str, keep_default_na=False, encoding="utf-8-sig")
         return self._t[name]
 
     def has(self, name: str) -> bool:

@@ -12,7 +12,9 @@ from pathlib import Path
 
 import numpy as np
 
-TASKS = ["class_areas", "compare", "coverage"]
+TASKS = ["class_areas", "compare", "coverage", "value_stats"]
+import threading
+_RASTER_LOCK = threading.Lock()  # one big raster in memory at a time
 
 
 class RasterError(Exception):
@@ -51,6 +53,11 @@ def _cell_areas(transform, height, crs) -> np.ndarray:
 
 
 def _read(path, boundary_geom=None):
+    with _RASTER_LOCK:
+        return _read_unlocked(path, boundary_geom)
+
+
+def _read_unlocked(path, boundary_geom=None):
     import rasterio
     from rasterio.features import geometry_mask
     with rasterio.open(path) as d:
@@ -87,6 +94,21 @@ def run_raster(b: dict, rasters: dict, boundary_geom, boundary_label: str, leg: 
     r1 = rasters.get(b.get("raster") or "")
     if r1 is None:
         raise RasterError("choose a raster")
+    if task in ("class_areas", "compare"):
+        import rasterio
+        with rasterio.open(r1.file) as d:
+            if d.dtypes[0].startswith("float"):
+                raise RasterError("this raster holds continuous values (e.g. elevation), not classes; use task value_stats")
+    if task == "value_stats":
+        arr, valid, ra, d = _read(r1.file, boundary_geom)
+        v = arr[valid].astype("float64")
+        if not v.size:
+            raise RasterError("no valid cells in scope")
+        facts.append(f"{r1.label}{scope}: {v.size:,} valid cells; min {v.min():.2f}, max {v.max():.2f}, mean {v.mean():.2f} (raster units)")
+        keys += [f"{v.min():.2f}", f"{v.max():.2f}", f"{v.mean():.2f}"]
+        rec.add(f"{r1.label}, cell values{scope}")
+        del arr, valid
+        return facts, keys
     if task == "class_areas":
         res = class_areas(r1.file, boundary_geom, excl)
         tot_c, tot_a = sum(v[0] for v in res.values()), sum(v[1] for v in res.values())

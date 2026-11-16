@@ -97,19 +97,33 @@ GENERIC_NAME_WORDS = {"data", "dataset", "report", "readme", "guide", "source", 
                       "draft", "version", "copy", "full", "text", "document", "info", "information", "records", "description"}
 _SRC_CACHE: dict = {}
 _IDX_CACHE: dict = {}
+import threading
+_LOCKS: dict = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def key_lock(key) -> threading.Lock:
+    """One lock per cache key: parallel questions of a pack load a big source once instead of once each."""
+    with _LOCKS_GUARD:
+        return _LOCKS.setdefault(key, threading.Lock())
 
 
 def clear_caches() -> None:
     """Free every per-pack cache (record tables, point clouds, layers, feeds, indexes). Called between packs."""
     import gc
     from . import spatial_op, transit_op
-    for c in (_DF_CACHE, _SRC_CACHE, _IDX_CACHE, spatial_op._LAYERS, transit_op._FEEDS):
+    for c in (_DF_CACHE, _SRC_CACHE, _IDX_CACHE, spatial_op._LAYERS, transit_op._FEEDS, _LOCKS):
         c.clear()
     gc.collect()
 
 
 def text_index(files: list[Path]) -> Index:
     key = tuple(sorted(map(str, files)))
+    with key_lock(("idx",) + key):
+        return _text_index(files, key)
+
+
+def _text_index(files, key):
     if key not in _IDX_CACHE:  # one index per pack, reused by every question of that pack
         _IDX_CACHE[key] = Index(files)
     return _IDX_CACHE[key]
@@ -117,8 +131,9 @@ def text_index(files: list[Path]) -> Index:
 
 def build_sources(files: list[Path]) -> list[Source]:
     key = tuple(sorted(map(str, files)))
-    if key not in _SRC_CACHE:
-        _SRC_CACHE[key] = _build_sources(files)
+    with key_lock(("src",) + key):
+        if key not in _SRC_CACHE:
+            _SRC_CACHE[key] = _build_sources(files)
     return _SRC_CACHE[key]
 
 
@@ -246,6 +261,11 @@ SKIP_REC_SHEET = re.compile(r"cover|contents|^notes?$|about|readme|metadata", re
 
 
 def load_df(s: Source) -> pd.DataFrame:
+    with key_lock(("df", str(s.file), s.fmt, s.sheet, s.json_path)):
+        return _load_df(s)
+
+
+def _load_df(s: Source) -> pd.DataFrame:
     if s.fmt:
         key = (s.file, s.fmt)
         if key not in _DF_CACHE:

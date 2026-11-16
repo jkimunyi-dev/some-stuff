@@ -62,10 +62,14 @@ def sheet_records(path: Path, sheet: str, max_scan: int = 12):
 
 # ---------------------------------------------------------------- profiling (what the model sees)
 def is_blank_series(s: pd.Series) -> pd.Series:
+    if pd.api.types.is_numeric_dtype(s):  # numeric columns: only missing values are blank (no string conversion)
+        return s.isna()
     return s.isna() | s.astype(str).str.strip().isin(["", "nan", "None", "NaN", "null"])
 
 
 def to_num(s: pd.Series) -> pd.Series:
+    if pd.api.types.is_numeric_dtype(s):
+        return s.astype("float64")
     t = s.astype(str).str.strip().str.replace(" ", "", regex=False).str.replace(" ", "", regex=False)
     # decimal comma (e.g. 158,006) only when no dot is present and exactly one comma
     t = t.where(~(t.str.count(",") == 1) | t.str.contains(r"\.", regex=True), t.str.replace(",", ".", regex=False))
@@ -126,6 +130,17 @@ def _mask(df: pd.DataFrame, f: dict) -> pd.Series:
         return is_blank_series(s)
     if op == "not_blank":
         return ~is_blank_series(s)
+    if pd.api.types.is_numeric_dtype(s):  # numeric column: numeric comparisons only (fast on millions of rows)
+        if op in ("contains", "not_contains"):
+            raise QueryError(f"{c} is numeric; use =, !=, <, <=, >, >= with a number")
+        y = pd.to_numeric(str(v).replace(",", ""), errors="coerce")
+        if pd.isna(y):
+            raise QueryError(f"{c} is numeric; the value {v!r} is not a number")
+        x = s.astype("float64")
+        m = {"=": (x - y).abs() < 1e-9, "!=": (x - y).abs() >= 1e-9, ">": x > y, ">=": x >= y, "<": x < y, "<=": x <= y}[op]
+        if op == "=" and not m.any():
+            raise QueryError(f"no record has {c} = {v!r} (range {x.min():g}..{x.max():g})")
+        return m
     if op in ("contains", "not_contains"):
         m = s.astype(str).str.contains(re.escape(v), case=False, na=False)
         return m if op == "contains" else ~m
@@ -190,8 +205,16 @@ def run_query(df: pd.DataFrame, q: dict, name: str) -> tuple[list[str], list[str
     if grp:
         if grp not in df.columns:
             raise QueryError(f"unknown group_by column {grp!r}")
+        nun = sub[grp].nunique(dropna=False)
+        if nun > 5000:
+            raise QueryError(f"group_by column {grp!r} has {nun:,} distinct values; group by a category column (or filter) instead")
         g = sub.assign(_g=sub[grp].where(~is_blank_series(sub[grp]), "(blank)").astype(str).str.strip())
-        res = {k: aggregate(v) for k, v in g.groupby("_g")}
+        if agg == "count":  # vectorised paths for the common aggregates
+            res = g.groupby("_g").size().astype(int).to_dict()
+        elif agg in ("sum", "mean", "median", "min", "max") and to_num(g[tgt]).notna().any():
+            res = getattr(g.assign(_v=to_num(g[tgt])).groupby("_g")["_v"], agg)().dropna().astype(float).to_dict()
+        else:
+            res = {k: aggregate(v) for k, v in g.groupby("_g")}
         asc = q.get("sort") == "asc"
         numv = lambda kv: kv[1] if isinstance(kv[1], (int, float)) else float("-inf")
         items = sorted(res.items(), key=numv, reverse=not asc)
@@ -224,7 +247,8 @@ def run_query(df: pd.DataFrame, q: dict, name: str) -> tuple[list[str], list[str
             x = to_num(sub[tgt])
             if x.notna().any():
                 ext = x.max() if agg == "max" else x.min()
-                idcol = next((c for c in sub.columns if re.search(r"(^|_)(id|ref|reference|code|name|nummer|number)$", str(c), re.I)), None)
+                idcol = next((c for c in sub.columns if not pd.api.types.is_numeric_dtype(sub[c]) and
+                              re.search(r"(^|_)(id|ref|reference|code|name|nummer|number)$", str(c), re.I)), None)
                 if idcol:
                     facts.append(f"  record(s) with that {agg}: " + ", ".join(sub.loc[x == ext, idcol].astype(str).head(5)))
     loc = f"{name}, columns {', '.join(dict.fromkeys([f['column'] for f in q.get('filters') or []] + [c for c in (tgt, grp) if c]))}{where}"

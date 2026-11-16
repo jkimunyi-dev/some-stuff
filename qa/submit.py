@@ -92,6 +92,8 @@ def main():
     ap.add_argument("--think", action="store_true")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--workers", type=int, default=1)
+    ap.add_argument("--isolate", action="store_true", help="answer each pack in a fresh subprocess (memory fully released; a killed pack loses only itself)")
+    ap.add_argument("--pack", type=int, default=0, help="(child mode) answer only this 1-based pack index, then exit")
     a = ap.parse_args()
     test = pd.read_csv(Path(a.data) / "Test.csv")
     order = list(test.ID)
@@ -103,7 +105,13 @@ def main():
             done[r["id"]] = r
     llm = LLM(a.model, url=a.url)
     llm.think_plan = a.think
+    all_packs = list(pack_groups(test).items())
+    if a.isolate and not a.pack:
+        return isolate_parent(a, test, order, all_packs, ck)
     todo = [r for r in test.itertuples() if r.ID not in done]
+    if a.pack:
+        keep = {r.ID for r in all_packs[a.pack - 1][1]}
+        todo = [r for r in todo if r.ID in keep]
     if a.limit:
         todo = todo[: a.limit]
     import threading
@@ -129,7 +137,7 @@ def main():
 
     from .agent import clear_caches
     from .progress import Progress, token_from_env_or_kaggle
-    prog = Progress(token_from_env_or_kaggle(), label=f"submit {a.model}")
+    prog = Progress(None if a.pack else token_from_env_or_kaggle(), label=f"submit {a.model}")  # children: the parent reports
     prog.update(list(done.values()), len(order), note="started")
     packs: dict = {}
     for r in todo:  # pack by pack: sources load once per pack and memory is freed before the next pack
@@ -141,6 +149,77 @@ def main():
             clear_caches()
             prog.update(list(done.values()), len(order), note=f"pack {i}/{len(packs)} done")
             print(f"--- pack {i}/{len(packs)} done ({len(rs)} questions); {len(done)}/{len(order)} answered so far", flush=True)
+    if a.pack:
+        return
+    finish(a, order, done, prog)
+
+
+def pack_groups(test: pd.DataFrame) -> dict:
+    g: dict = {}
+    for r in test.itertuples():
+        g.setdefault(r.Source_IDs, []).append(r)
+    return g
+
+
+def load_done(ck: Path) -> dict:
+    done = {}
+    if ck.exists():
+        for ln in ck.read_text(encoding="utf-8").splitlines():
+            try:
+                r = json.loads(ln)
+                done[r["id"]] = r
+            except ValueError:  # a line cut off by a killed process
+                continue
+    return done
+
+
+def isolate_parent(a, test, order, all_packs, ck: Path):
+    import subprocess
+    import sys
+    from .progress import Progress, token_from_env_or_kaggle
+    prog = Progress(token_from_env_or_kaggle(), label=f"submit {a.model} (isolated packs)")
+    done = load_done(ck)
+    prog.update(list(done.values()), len(order), note="started")
+    base = [sys.executable, "-u", "-m", "qa.submit", "--sources", a.sources, "--data", a.data, "--out", a.out, "--model", a.model,
+            "--url", a.url, "--workers", str(a.workers)] + (["--think"] if a.think else [])
+    for i, (k, rs) in enumerate(all_packs, 1):
+        if all(r.ID in done for r in rs):
+            continue
+        t0 = time.time()
+        rc = subprocess.run(base + ["--pack", str(i)]).returncode
+        done = load_done(ck)
+        missing = [r for r in rs if r.ID not in done]
+        if missing:  # the child died (e.g. out of memory): record its unanswered questions and move on
+            with ck.open("a", encoding="utf-8") as fh:
+                for r in missing:
+                    row = {"id": r.ID, "domain": r.Domain, "question": r.Question, "answer": "", "evidence": [], "op": None, "facts": [],
+                           "trace": {}, "error": f"crash: pack process exited with code {rc}", "ledger": {"calls": 0, "tokens": 0, "seconds": 0}}
+                    fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+            done = load_done(ck)
+        prog.update(list(done.values()), len(order), note=f"pack {i}/{len(all_packs)} rc={rc}")
+        print(f"=== pack {i}/{len(all_packs)} rc={rc} in {time.time() - t0:.0f}s; {len(done)}/{len(order)} done; lost {len(missing)}", flush=True)
+    finish(a, order, done, prog)
+
+
+def write_run_store(path: str, order: list, done: dict, meta: dict) -> None:
+    """Compact, queryable run record: one SQLite file per run (runs + answers tables)."""
+    import sqlite3
+    from .progress import category
+    con = sqlite3.connect(path)
+    con.executescript("""CREATE TABLE IF NOT EXISTS runs(run_id TEXT PRIMARY KEY, meta TEXT);
+        CREATE TABLE IF NOT EXISTS answers(run_id TEXT, id TEXT, domain TEXT, op TEXT, status TEXT, cause TEXT, calls INT, tokens INT,
+                                           seconds REAL, answer TEXT, evidence TEXT, error TEXT, PRIMARY KEY(run_id, id));""")
+    rid = meta["run_id"]
+    con.execute("INSERT OR REPLACE INTO runs VALUES (?,?)", (rid, json.dumps(meta)))
+    con.executemany("INSERT OR REPLACE INTO answers VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", [
+        (rid, q, r.get("domain"), r.get("op"), "answered" if not r.get("error") else "failed", category(r.get("error")),
+         r["ledger"]["calls"], r["ledger"]["tokens"], r["ledger"]["seconds"], r.get("answer", ""), json.dumps(r.get("evidence") or []),
+         (r.get("error") or "")[:300]) for q in order if (r := done.get(q))])
+    con.commit()
+    con.close()
+
+
+def finish(a, order, done, prog):
     rows = list(done.values())
     md = render(rows, order)
     errs = validate(md, order)
@@ -151,6 +230,12 @@ def main():
     rep["format_errors"] = errs[:20]
     print(json.dumps(rep, indent=1))
     Path(a.out + ".audit.json").write_text(json.dumps(rep, indent=1), encoding="utf-8")
+    import os
+    import subprocess
+    commit = subprocess.run(["git", "-C", str(Path(__file__).resolve().parent.parent), "rev-parse", "--short", "HEAD"],
+                            capture_output=True, text=True).stdout.strip()
+    write_run_store(a.out + ".sqlite", order, done, {"run_id": f"{commit}-{time.strftime('%Y%m%d%H%M', time.gmtime())}", "commit": commit,
+                                                     "model": a.model, "url": a.url, "audit": rep})
 
 
 if __name__ == "__main__":

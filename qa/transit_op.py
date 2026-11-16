@@ -30,6 +30,15 @@ def feed_for(files: list[Path]) -> Feed | None:
     if not {"stops.txt", "trips.txt"} <= names:
         return None
     key = tuple(sorted(str(f) for f in files))
+    with _FEED_LOCK:
+        return _feed(folder, files, key)
+
+
+import threading
+_FEED_LOCK = threading.Lock()
+
+
+def _feed(folder, files, key):
     if key not in _FEEDS:
         fd = Feed(next(iter(folder)))
         # restrict to this pack's files (the folder holds every source)

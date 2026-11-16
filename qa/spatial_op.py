@@ -31,9 +31,14 @@ class SpatialError(Exception):
 _LAYERS: dict = {}
 
 
+import threading
+_LAYER_LOCK = threading.Lock()
+
+
 def layer(path) -> Layer:
-    if path not in _LAYERS:
-        _LAYERS[path] = Layer(path)
+    with _LAYER_LOCK:  # load each layer once even when questions run in parallel
+        if path not in _LAYERS:
+            _LAYERS[path] = Layer(path)
     return _LAYERS[path]
 
 
