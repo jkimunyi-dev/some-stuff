@@ -352,8 +352,28 @@ def _mask(df: pd.DataFrame, f: dict) -> pd.Series:
     return m if op == "=" else ~m
 
 
+TOTAL_ROW = re.compile(r"^\s*(grand\s+|sub-?)?totals?\b|^\s*sum\s*$|^\s*all\s+(records|items|categories|types|sectors|areas)\s*$", re.I)
+
+
+def total_rows(df: pd.DataFrame) -> pd.Series:
+    """Rows whose label cell says Total/Totals/Grand total/Subtotal/Sum: aggregates over detail rows must not add them in."""
+    m = pd.Series(False, index=df.index)
+    for c in df.columns:
+        s = df[c]
+        if pd.api.types.is_object_dtype(s) or pd.api.types.is_string_dtype(s):
+            m |= s.astype(str).str.match(TOTAL_ROW, na=False)
+    return m
+
+
 def run_query(df: pd.DataFrame, q: dict, name: str) -> tuple[list[str], list[str], str]:
     """Returns (facts, key numbers, evidence locator)."""
+    note = ""
+    if q.get("aggregate") in ("sum", "mean", "median", "min", "max", "count", "count_distinct") and len(df) <= 2_000_000:
+        tm = total_rows(df)
+        asked_total = any(TOTAL_ROW.match(str(f.get("value", ""))) for f in q.get("filters") or [])
+        if tm.any() and not tm.all() and not asked_total:  # lesson 2: never add a Totals row into its own detail rows
+            note = f" ({int(tm.sum())} total/subtotal row(s) excluded)"
+            df = df[~tm]
     total = len(df)
     m = pd.Series(True, index=df.index)
     desc = []
@@ -441,5 +461,7 @@ def run_query(df: pd.DataFrame, q: dict, name: str) -> tuple[list[str], list[str
                               re.search(r"(^|_)(id|ref|reference|code|name|nummer|number)$", str(c), re.I)), None)
                 if idcol:
                     facts.append(f"  record(s) with that {agg}: " + ", ".join(sub.loc[x == ext, idcol].astype(str).head(5)))
+    if note and facts:
+        facts[0] += note
     loc = f"{name}, columns {', '.join(dict.fromkeys([f['column'] for f in q.get('filters') or []] + [c for c in (tgt, grp) if c]))}{where}"
     return facts, keys, loc
