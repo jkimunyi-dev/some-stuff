@@ -10,6 +10,7 @@ pypdf
 pdfplumber
 laspy
 lazrs
+sentence-transformers
 lxml
 beautifulsoup4
 networkx

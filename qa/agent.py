@@ -623,7 +623,10 @@ def rank_sources(pool: list[Source], query: str, k: int) -> list[Source]:
     def score(d):
         tf = Counter(d)
         return sum(math.log(1 + (N - df[t] + 0.5) / (df[t] + 0.5)) * tf[t] * 2.5 / (tf[t] + 1.5 * (0.25 + 0.75 * len(d) / avg)) for t in q if t in tf)
-    keep = sorted(range(N), key=lambda i: -score(docs[i]))[:k]
+    bm = sorted(range(N), key=lambda i: -score(docs[i]))
+    from .rerank import rerank
+    rr = rerank(query, [s.desc for s in pool], k)
+    keep = list(dict.fromkeys((rr[:max(1, k - 5)] if rr else []) + bm))[:k] if rr else bm[:k]  # reranker picks + BM25 for recall
     return [pool[i] for i in sorted(keep)]  # keep original order (and ids) among the kept
 
 

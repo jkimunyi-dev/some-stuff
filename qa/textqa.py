@@ -139,5 +139,10 @@ class Index:
                     idf = math.log(1 + (N - self.df[t] + 0.5) / (self.df[t] + 0.5))
                     s += idf * tf[t] * (k1 + 1) / (tf[t] + k1 * (1 - b + b * len(d) / self.avg))
             scores.append(s)
-        order = sorted(range(N), key=lambda i: -scores[i])
-        return [self.ps[i] for i in order[:k] if scores[i] > 0]
+        order = [i for i in sorted(range(N), key=lambda i: -scores[i]) if scores[i] > 0]
+        pool = order[:30]  # BM25 shortlist -> cross-encoder rerank (contextual header = file + locator)
+        from .rerank import rerank
+        rr = rerank(query, [f"{clean_name(self.ps[i].file)} | {self.ps[i].locator} | {self.ps[i].text}" for i in pool], k)
+        if rr is not None:
+            return [self.ps[pool[j]] for j in rr]
+        return [self.ps[i] for i in order[:k]]
