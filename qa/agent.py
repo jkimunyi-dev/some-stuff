@@ -184,6 +184,12 @@ def _build_sources(files: list[Path]) -> list[Source]:
                 with rasterio.open(f) as d:
                     add("raster", f, f"[{name}] raster map {d.width}x{d.height} cells, CRS {d.crs}, cell size {d.res[0]:.6g}, nodata {d.nodata}, "
                                      f"bounds {tuple(round(v, 4) for v in d.bounds)}")
+            elif suf in (".sqlite", ".db", ".gpkg_") :
+                from .formats import sqlite_tables
+                for tname, df in sqlite_tables(f).items():
+                    _DF_CACHE[(f, f"sqlite:{tname}")] = df
+                    add("csv", f, f"[{name} | SQLite table {tname}] {len(df)} rows, columns: {', '.join(map(str, df.columns[:30]))}",
+                        columns=[str(c) for c in df.columns], fmt=f"sqlite:{tname}")
             elif suf == ".ifc":
                 from .formats import ifc_tables
                 for tname, df in ifc_tables(f).items():
@@ -281,8 +287,9 @@ def _load_df(s: Source) -> pd.DataFrame:
     if s.fmt:
         key = (s.file, s.fmt)
         if key not in _DF_CACHE:
-            from .formats import ifc_tables, las_table
-            _DF_CACHE[key] = las_table(s.file)[0] if s.fmt == "las" else ifc_tables(s.file)[s.fmt.split(":", 1)[1]]
+            from .formats import ifc_tables, las_table, sqlite_tables
+            kind_, _, tname = s.fmt.partition(":")
+            _DF_CACHE[key] = las_table(s.file)[0] if s.fmt == "las" else (sqlite_tables(s.file) if kind_ == "sqlite" else ifc_tables(s.file))[tname]
         return _DF_CACHE[key]
     if s.sheet or s.json_path:
         key = (s.file, s.sheet or s.json_path)

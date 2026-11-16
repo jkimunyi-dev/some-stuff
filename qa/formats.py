@@ -131,3 +131,36 @@ def las_table(path: Path) -> tuple[pd.DataFrame, str]:
     facts = (f"point records {h.point_count}; x {h.mins[0]:.3f}..{h.maxs[0]:.3f}; y {h.mins[1]:.3f}..{h.maxs[1]:.3f}; "
              f"z {h.mins[2]:.3f}..{h.maxs[2]:.3f}; scales {tuple(h.scales)}; LAS {h.version}; point format {h.point_format.id}")
     return df, facts
+
+
+# ---------------------------------------------------------------- SQLite
+def sqlite_tables(path: Path, max_rows: int = 500_000) -> dict[str, pd.DataFrame]:
+    """Every table of a SQLite file as a DataFrame; JSON-text columns (e.g. properties_json) are expanded into
+    '<column>.<key>' columns so attributes inside the JSON can be filtered and grouped."""
+    import json
+    import sqlite3
+    con = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True)
+    out = {}
+    for (name,) in con.execute("SELECT name FROM sqlite_master WHERE type='table'"):
+        df = pd.read_sql_query(f'SELECT * FROM "{name}" LIMIT {max_rows}', con)
+        for c in list(df.columns):
+            sample = df[c].dropna().astype(str).head(50)
+            if len(sample) and sample.str.match(r"^\s*[\[{]").mean() > 0.8:
+                def parse(x):
+                    try:
+                        return json.loads(x) if isinstance(x, str) else None
+                    except ValueError:
+                        return None
+                parsed = df[c].map(parse)
+                if parsed.map(lambda x: isinstance(x, dict)).mean() > 0.8:
+                    exp = pd.json_normalize(parsed.map(lambda x: x if isinstance(x, dict) else {}).tolist(), sep=".")
+                    exp.columns = [f"{c.removesuffix('_json')}.{k}" for k in exp.columns]
+                    for k in exp.columns:  # nested lists/dicts as text
+                        if exp[k].map(lambda x: isinstance(x, (list, dict))).any():
+                            exp[k] = exp[k].map(lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, (list, dict)) else x)
+                    df = pd.concat([df.drop(columns=[c]), exp.set_index(df.index)], axis=1)
+                else:
+                    df[c] = parsed.map(lambda x: json.dumps(x, ensure_ascii=False) if x is not None else None)
+        out[name] = df
+    con.close()
+    return out
