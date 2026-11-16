@@ -9,3 +9,6 @@ sources/
 extracted/
 runs/
 colab_code.zip
+
+# local R2 credentials (never commit)
+.r2.env

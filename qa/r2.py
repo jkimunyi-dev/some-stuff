@@ -21,8 +21,16 @@ from pathlib import Path
 KEYS = ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET")
 
 
+def _local_env() -> dict:
+    """KEY=VALUE lines from .r2.env in the repo root (local machine only; git-ignored)."""
+    f = Path(__file__).resolve().parent.parent / ".r2.env"
+    if not f.exists():
+        return {}
+    return dict(l.split("=", 1) for l in (x.strip() for x in f.read_text(encoding="utf-8").splitlines()) if "=" in l and not l.startswith("#"))
+
+
 def secret(name: str) -> str | None:
-    v = os.environ.get(name)
+    v = os.environ.get(name) or _local_env().get(name, "").strip()
     if v:
         return v
     try:
