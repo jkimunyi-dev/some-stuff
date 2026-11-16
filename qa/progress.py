@@ -87,6 +87,11 @@ def token_from_env_or_kaggle() -> str | None:
         from kaggle_secrets import UserSecretsClient
         return UserSecretsClient().get_secret("GH_TOKEN")
     except Exception:
+        pass
+    try:  # Colab: secret 'GH_TOKEN' in the notebook's Secrets panel (key icon), notebook access switched on
+        from google.colab import userdata
+        return userdata.get("GH_TOKEN")
+    except Exception:
         return None
 
 

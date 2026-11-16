@@ -6,7 +6,8 @@ import glob, json, os, subprocess, sys, time, zipfile, urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-OUT = Path("/kaggle/working")
+OUT = Path(os.environ.get("QA_OUT", "/kaggle/working"))  # Colab: QA_OUT=/content/drive/MyDrive/...
+OUT.mkdir(parents=True, exist_ok=True)
 MODELS = sys.argv[2].split(",") if len(sys.argv) > 2 else ["qwen3.5:2b"]  # kernel arg 2 overrides; must be <= 3B total parameters (checked below)
 PROFILES = {  # selected by the kernel's first argument; real end-to-end Qwen runs only
     "full": [("qwen_dev", ["--split", "dev", "--workers", "4"]), ("qwen_dev_think", ["--split", "dev", "--think", "--workers", "4"])],
@@ -29,8 +30,8 @@ def sh(cmd, check=False, **kw):
 
 
 t0 = time.time()
-sh("nvidia-smi --query-gpu=name,memory.total --format=csv; nproc; free -g | head -2; df -h /kaggle/working | tail -1")
-train = glob.glob("/kaggle/input/**/Train.csv", recursive=True)
+sh("nvidia-smi --query-gpu=name,memory.total --format=csv; nproc; free -g | head -2; df -h {OUT} | tail -1")
+train = glob.glob(os.environ["QA_DATA"] + "/**/Train.csv", recursive=True) if os.environ.get("QA_DATA") else glob.glob("/kaggle/input/**/Train.csv", recursive=True)
 assert train, "dataset not mounted"
 DATA = Path(train[0]).parent
 print("DATA", DATA, os.listdir(DATA))
@@ -53,7 +54,7 @@ if RUNS and RUNS[0][0] == "VLLM_DEV":
     sh("pip -q install 'vllm>=0.17' 2>&1 | tail -3")
     sh("python -c 'import vllm, torch; print(\"vllm\", vllm.__version__, \"torch\", torch.__version__, torch.cuda.get_device_name(0))'")
     subprocess.Popen(f"nohup vllm serve {VMODEL} --dtype half --max-model-len 16384 --gpu-memory-utilization 0.85 --max-num-seqs 8 "
-                     f"--default-chat-template-kwargs '{{\"enable_thinking\": false}}' > /kaggle/working/vllm.log 2>&1 &", shell=True)
+                     f"--default-chat-template-kwargs '{{\"enable_thinking\": false}}' > {OUT}/vllm.log 2>&1 &", shell=True)
     ok = False
     for _ in range(240):  # up to 20 min for download + load
         try:
@@ -62,18 +63,18 @@ if RUNS and RUNS[0][0] == "VLLM_DEV":
             break
         except Exception:
             time.sleep(5)
-    sh("tail -30 /kaggle/working/vllm.log")
+    sh(f"tail -30 {OUT}/vllm.log")
     if not ok:
         sys.exit("vLLM server did not come up (see vllm.log)")
     t1 = time.time()
-    sh(f"cd {REPO} && python -u -m qa.run_dev --sources {SRC} --data {DATA} --model {VMODEL} --url http://127.0.0.1:8000/v1 --split dev --workers 4 --out /kaggle/working/vllm_dev.json 2>&1 | tail -60")
+    sh(f"cd {REPO} && python -u -m qa.run_dev --sources {SRC} --data {DATA} --model {VMODEL} --url http://127.0.0.1:8000/v1 --split dev --workers 4 --out {OUT}/vllm_dev.json 2>&1 | tail -60")
     print("vllm dev run seconds", round(time.time() - t1), "| total", round(time.time() - t0))
     sys.exit(0)
 
 # --- ollama
 sh("apt-get -qq install -y zstd pciutils lshw > /dev/null 2>&1")
 sh("curl -fsSL https://ollama.com/install.sh | sh 2>&1 | tail -3")
-subprocess.Popen("OLLAMA_NUM_PARALLEL=4 nohup ollama serve > /kaggle/working/ollama.log 2>&1 &", shell=True)  # 4 concurrent requests
+subprocess.Popen(f"OLLAMA_NUM_PARALLEL=4 nohup ollama serve > {OUT}/ollama.log 2>&1 &", shell=True)  # 4 concurrent requests
 for _ in range(60):
     try:
         urllib.request.urlopen("http://127.0.0.1:11434/api/version", timeout=2)
@@ -99,9 +100,9 @@ for MODEL in MODELS:
     tag = MODEL.replace(":", "_").replace(".", "")
     for name, args in RUNS:
         if name == "SUBMIT":  # all 600 Test questions (inference only), resumable, validated, budget-audited
-            sh(f"cd {REPO} && python -u -m qa.submit --sources {SRC} --data {DATA} --model {MODEL} --workers 4 --isolate {' '.join(args)} --out /kaggle/working/submission_{tag}.md 2>&1 | grep -E '^===|answered|budget|format|unanswered|errors|max_' | tail -90")
+            sh(f"cd {REPO} && python -u -m qa.submit --sources {SRC} --data {DATA} --model {MODEL} --workers 4 --isolate {' '.join(args)} --out {OUT}/submission_{tag}.md 2>&1 | grep -E '^===|answered|budget|format|unanswered|errors|max_' | tail -90")
             continue
-        sh(f"cd {REPO} && python -u -m qa.run_dev --sources {SRC} --data {DATA} --model {MODEL} {' '.join(args)} --out /kaggle/working/{name}_{tag}.json 2>&1")
+        sh(f"cd {REPO} && python -u -m qa.run_dev --sources {SRC} --data {DATA} --model {MODEL} {' '.join(args)} --out {OUT}/{name}_{tag}.json 2>&1")
     sh(f"ollama stop {MODEL}")
 (OUT / "MODEL.json").write_text(json.dumps(meta, indent=1))
 print("done in", round(time.time() - t0), "s")
