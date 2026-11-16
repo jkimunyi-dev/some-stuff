@@ -305,6 +305,13 @@ MISSING_CLAIM = re.compile(r"\b(?:not (?:provided|available|specified|given|stat
                            r"report|mention|list|give|show)|cannot be (?:determined|calculated|computed|verified|answered)|unavailable|"
                            r"insufficient|is missing|are missing)", re.I)
 
+# table_query: a bare count of matching records answers only "how many" questions (E: 34 table_query answers, 0 correct)
+COUNT_CUE = re.compile(r"\b(how many|number of|count(?:s|ed)?|tally|total number)\b", re.I)
+BARE_COUNT_MSG = ("the question does not ask how many records match, so a bare record count (aggregate=count without group_by) "
+                  "does not answer it. Compute the value it asks for: a target column with sum/mean/median/min/max, count_distinct "
+                  "for distinct identifiers, list_values to read the matching record's fields, or group_by for which/most/per questions; "
+                  "use filters that isolate exactly the record(s) the question names")
+
 THINK_BUDGET = 1500  # extra generated tokens per plan/bind call when thinking is on (the ledger still caps 12,000 per question)
 THINK_NOTES = 2500  # characters of (possibly truncated) reasoning handed to the answer-only follow-up call
 
@@ -1126,9 +1133,16 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             bm = [{"role": "system", "content": SYS},
                   {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nTABLE {name}\nColumns:\n{profile(df)}\n{hint}\n"
                                               + TQ_MANUAL + " Reply as JSON."}]
+            asks_count = bool(COUNT_CUE.search(question))
+            tries_q = [0]
 
             def vq(o):
                 o.pop("reasoning", None)
+                tries_q[0] += 1
+                # a bare record count only answers "how many" questions; push back twice, then accept (never worse than before)
+                if o["aggregate"] == "count" and not o.get("group_by") and not asks_count and tries_q[0] < 3:
+                    trace.setdefault("count_pushback", []).append(tries_q[0])
+                    raise Fail(BARE_COUNT_MSG)
                 for f_ in o.get("filters") or []:
                     if f_["op"] in ("is_blank", "not_blank"):
                         f_["value"] = ""
