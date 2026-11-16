@@ -5,4 +5,4 @@ D = "/kaggle/working/some-stuff"
 shutil.rmtree(D, ignore_errors=True)
 subprocess.run(["git", "clone", "--depth", "1", REPO, D], check=True)
 print(subprocess.run(["git", "-C", D, "log", "--oneline", "-1"], capture_output=True, text=True).stdout)
-raise SystemExit(subprocess.run(["python", f"{D}/kaggle/run.py", "vllm_dev"]).returncode)
+raise SystemExit(subprocess.run(["python", f"{D}/kaggle/run.py", "submit"]).returncode)
