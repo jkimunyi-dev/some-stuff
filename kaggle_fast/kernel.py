@@ -3,7 +3,7 @@
 # BATCH: 1-based 50-row slice of Test.csv (empty = all 600).
 import subprocess, shutil, os
 REPO = "https://github.com/jkimunyi-dev/some-stuff.git"
-PIN = "c452d97"
+PIN = "dd2f275"
 BATCH = "2"
 PROFILE = "submit"
 D = "/kaggle/working/some-stuff"
