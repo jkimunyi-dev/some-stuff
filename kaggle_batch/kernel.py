@@ -2,8 +2,8 @@
 # One 50-question batch of Test.csv (rows (BATCH-1)*50 .. BATCH*50-1) (PROFILE: submit = thinking off, submit_think = on), for fast judge feedback.
 import subprocess, shutil, os
 REPO = "https://github.com/jkimunyi-dev/some-stuff.git"
-PIN = "dd2f275"
-BATCH = "1"
+PIN = "788d04c"
+BATCH = "3"
 PROFILE = "submit"
 D = "/kaggle/working/some-stuff"
 shutil.rmtree(D, ignore_errors=True)
