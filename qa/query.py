@@ -44,7 +44,11 @@ def json_records(path: Path, max_bytes: int = 200_000_000):
     recs = best[0]
     if all(isinstance(r.get("properties"), dict) for r in recs[:20]):  # GeoJSON-like features
         recs = [{**r["properties"], **({"id": r["id"]} if "id" in r else {})} for r in recs]
-    return pd.json_normalize(recs, sep="."), best[1]
+    df = pd.json_normalize(recs, sep=".")
+    for c in df.columns:  # list/dict cells (e.g. coordinates, tags) -> JSON text so they can be compared, counted and grouped
+        if df[c].map(lambda x: isinstance(x, (list, dict))).any():
+            df[c] = df[c].map(lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, (list, dict)) else x)
+    return df, best[1]
 
 
 def sheet_records(path: Path, sheet: str, max_scan: int = 12):
@@ -125,6 +129,8 @@ def value_hits(df: pd.DataFrame, question: str, limit: int = 12) -> list[str]:
 # ---------------------------------------------------------------- execution
 def _mask(df: pd.DataFrame, f: dict) -> pd.Series:
     c, op, v = f["column"], f["op"], str(f.get("value", "")).strip()
+    while len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"`":  # the model often wraps values in quotes
+        v = v[1:-1].strip()
     s = df[c]
     if op == "is_blank":
         return is_blank_series(s)

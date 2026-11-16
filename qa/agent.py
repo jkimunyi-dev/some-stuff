@@ -271,6 +271,13 @@ def load_df(s: Source) -> pd.DataFrame:
 
 
 def _load_df(s: Source) -> pd.DataFrame:
+    if s.kind == "table" and s.table is not None:  # workbook table as long records: item, period, value (+ cell)
+        key = (s.file, "table:" + s.table.id)
+        if key not in _DF_CACHE:
+            t = s.table
+            rows = [{"item": e, "period": p, "value": t.raw.get((e, p)), "cell": t.addr.get((e, p))} for e in t.entities for p in t.periods]
+            _DF_CACHE[key] = pd.DataFrame(rows)
+        return _DF_CACHE[key]
     if s.fmt:
         key = (s.file, s.fmt)
         if key not in _DF_CACHE:
@@ -690,6 +697,11 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             ss = [by_id[x] for x in o["sources"]]
             # repair operation/source-kind mismatches instead of failing
             recs = [x for x in pool if x.kind in ("csv", "geo")]
+            data_kinds = {x.kind for x in pool} & {"csv", "geo", "table", "raster"}
+            if not data_kinds and o["operation"] not in ("text_answer", "explain"):  # documents only: answer from the text
+                trace["op_repair"] = f"{o['operation']} in a documents-only pack -> text_answer"
+                o["operation"] = "text_answer"
+                return o
             if o["operation"] in ("value", "change", "percent_of", "share", "ratio") and ss and all(x.kind in ("csv", "geo") for x in ss):
                 trace["op_repair"] = f"{o['operation']} on a record table -> table_query"
                 o["operation"] = "table_query"
@@ -706,7 +718,7 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             kinds = {s.kind for s in ss}
             need = {"value": {"table"}, "change": {"table"}, "percent_of": {"table"}, "share": {"table"}, "ratio": {"table"},
                     "record_lookup": {"csv", "geo"}, "count_blank": {"csv", "geo"}, "compare_keys": {"csv", "geo"}, "area": {"geo"}, "explain": None,
-                    "table_query": {"csv", "geo"}, "spatial": {"geo"}, "transit": None, "raster": None,
+                    "table_query": {"csv", "geo", "table"}, "spatial": {"geo"}, "transit": None, "raster": None,
                     "text_answer": None}[o["operation"]]
             if need and not kinds <= need:
                 raise Fail(f"operation {o['operation']} needs a source of kind {sorted(need)}, got {sorted(kinds)}")
