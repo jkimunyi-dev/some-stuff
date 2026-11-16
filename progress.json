@@ -1,12 +1,12 @@
 {
  "label": "submit qwen3.5:2b (isolated packs)",
- "updated_utc": "2026-11-16 10:09:41",
- "elapsed_min": 72.3,
- "done": 590,
+ "updated_utc": "2026-11-16 10:09:52",
+ "elapsed_min": 72.5,
+ "done": 592,
  "total": 600,
- "answered": 501,
+ "answered": 503,
  "by_category": {
-  "answered": 501,
+  "answered": 503,
   "value not found": 35,
   "format check": 1,
   "bind invalid": 49,
@@ -25,19 +25,19 @@
    "answered": 213
   },
   "urban_greenery": {
-   "done": 182,
-   "answered": 156
+   "done": 184,
+   "answered": 158
   }
  },
  "by_op": {
   "table_query": 247,
   "explain": 114,
-  "compare_keys": 22,
+  "compare_keys": 23,
   "spatial": 6,
   "text_answer": 55,
   "area": 4,
   "record_lookup": 9,
-  "count_blank": 14,
+  "count_blank": 15,
   "raster": 12,
   "transit": 11,
   "percent_of": 2,
@@ -46,5 +46,5 @@
  },
  "max_calls": 6,
  "max_tokens": 881,
- "note": "pack 56/64 rc=0"
+ "note": "pack 57/64 rc=0"
 }
