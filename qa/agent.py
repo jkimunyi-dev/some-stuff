@@ -19,7 +19,7 @@ from pathlib import Path
 import pandas as pd
 
 from .cards import guide_text, is_guide
-from .llm import LLM, BudgetExceeded, Ledger
+from .llm import LLM, MAX_CALLS, BudgetExceeded, Ledger
 from .score import numbers
 from .tables import Table, clean_name, sheet_text, workbook_tables
 from .raster_op import TASKS as RASTER_TASKS, RasterError, legend as raster_legend, run_raster
@@ -248,6 +248,13 @@ def _num(v):
 def _enum_schema(props: dict, required: list[str] | None = None) -> dict:
     return {"type": "object", "properties": props, "required": required or list(props)}
 
+
+# an answer that claims the sources lack something (checked before it is accepted; see missing-data recovery in answer())
+MISSING_CLAIM = re.compile(r"\b(?:not (?:provided|available|specified|given|stated|mentioned|included|reported|listed|present|recorded|found|"
+                           r"supplied|shown|contained)|no (?:data|information|records?|figures?|mention|values?|details?)\b|does not (?:contain|"
+                           r"include|provide|specify|state|report|mention|list|give|show|record)|do not (?:contain|include|provide|specify|state|"
+                           r"report|mention|list|give|show)|cannot be (?:determined|calculated|computed|verified|answered)|unavailable|"
+                           r"insufficient|is missing|are missing)", re.I)
 
 THINK_BUDGET = 2000  # extra generated tokens per plan/bind call when thinking is on (the ledger still caps 12,000 per question)
 
@@ -1160,7 +1167,8 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
                                           + "\n".join(f"- {x}" for x in facts) + (f"\n\nSOURCE TEXT:\n{ctx_txt}" if ctx_txt else "")
                                           + "\n\nAnswer every part of the question in 1-3 plain sentences, with units. If the question asks yes/no, start with Yes or No. "
                                             "Whenever the question asks for a number, count, date, name or identifier, state it explicitly from the facts or "
-                                            "source text; if it is not there, say which figure is missing. Give reasons ONLY from the facts or source text "
+                                            "source text (check every fact and passage, including table rows). Only if a requested figure is truly absent "
+                                            "from ALL of them, name that one figure as not given. Give reasons ONLY from the facts or source text "
                                             "(never from general knowledge). If the data does not support what is asked, say so and why. Do not mention cells or files."
                                           + (" Use only the passages; put the passage number you relied on in brackets, e.g. [P2]." if found else "")}]
         try:
@@ -1181,6 +1189,42 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         if keys and missing:
             trace["write_fallback"] = {"missing": missing, "model_answer": ans}
             ans = " ".join(_strip_cells(x) for x in facts)
+        # ---- missing-data recovery: an answer claiming the data is absent is not accepted until a wider search was made
+        docs_all = [s.file for s in pool if s.kind == "text"]
+        if ans and MISSING_CLAIM.search(ans) and docs_all and led.n_calls + 2 <= MAX_CALLS and led.remaining_tokens() > 700:
+            try:
+                qs = _enum_schema({"phrases": {"type": "array", "items": {"type": "string", "maxLength": 60}, "minItems": 1, "maxItems": 4}})
+                qm = [{"role": "user", "content": f"QUESTION: {question}\nThe answer was not found yet. Give up to 4 short search phrases (the exact "
+                                                  "words, labels, table headings or numbers likely to appear next to the answer in the source "
+                                                  "documents). Reply as JSON."}]
+                ph = _ask_json(llm, led, qm, qs, "search", lambda x: x, tries=1, max_tokens=120).get("phrases", [])
+                seen = {(x.file, x.locator) for x in found}
+                idx = text_index(docs_all)
+                more = []
+                for qq in [f"{question} {' '.join(ph)}"] + ph:
+                    for x in idx.search(qq, k=6):
+                        if (x.file, x.locator) not in seen:
+                            seen.add((x.file, x.locator))
+                            more.append(x)
+                more = more[:8]
+                trace["missing_recovery"] = {"claim": MISSING_CLAIM.search(ans).group(0), "phrases": ph,
+                                             "new_passages": [f"{clean_name(x.file)} | {x.locator}" for x in more]}
+                if more:
+                    base = len(found)
+                    found = found + more
+                    extra = "\n".join(f"[P{base + i + 1}] ({clean_name(x.file)}, {x.locator}) {x.text[:900]}" for i, x in enumerate(more))
+                    rm = wm + [{"role": "assistant", "content": ans},
+                               {"role": "user", "content": "Your answer says something is not available. These further passages were found in the "
+                                                           f"sources:\n{extra}\n\nRead them carefully (including table rows and figures). Rewrite the "
+                                                           "answer using any of them that hold the requested figures, citing [P#]; keep every number from "
+                                                           "COMPUTED FACTS. Say a figure is not given only if it is in none of the passages or facts."}]
+                    out = llm.chat(rm, led, think=False, profile="write", max_tokens=400, tag="write_recover")
+                    new = out["text"].strip()
+                    if new and not (keys and miss(new)):
+                        ans = new
+                        trace["missing_recovery"]["rewritten"] = True
+            except (Fail, BudgetExceeded):
+                pass
         cited = [int(n) - 1 for n in re.findall(r"\[P(\d+)\]", ans) if 0 < int(n) <= len(found)] or ([0] if found else [])
         ans = re.sub(r"\s*\[P\d+\](?:\s*,\s*\[P\d+\])*", "", ans).strip()
         evidence = format_evidence(ex.rec.items, facts, files) + [
