@@ -12,6 +12,7 @@ PROFILES = {  # selected by the kernel's first argument; real end-to-end Qwen ru
     "full": [("qwen_dev", ["--split", "dev", "--workers", "4"]), ("qwen_dev_think", ["--split", "dev", "--think", "--workers", "4"])],
     "fast": [("qwen_dev", ["--split", "dev", "--workers", "4"])],
     "submit": [("SUBMIT", [])],
+    "submit_think": [("SUBMIT", ["--think"])],
     "vllm_dev": [("VLLM_DEV", [])],
     "dev_submit": [("qwen_dev", ["--split", "dev", "--workers", "4"]), ("SUBMIT", [])],
     "confirm": [("qwen_dev", ["--split", "dev", "--workers", "4"]), ("qwen_holdout", ["--split", "holdout", "--workers", "4"])],
@@ -98,7 +99,7 @@ for MODEL in MODELS:
     tag = MODEL.replace(":", "_").replace(".", "")
     for name, args in RUNS:
         if name == "SUBMIT":  # all 600 Test questions (inference only), resumable, validated, budget-audited
-            sh(f"cd {REPO} && python -u -m qa.submit --sources {SRC} --data {DATA} --model {MODEL} --workers 4 --isolate --out /kaggle/working/submission_{tag}.md 2>&1 | grep -E '^===|answered|budget|format|unanswered|errors|max_' | tail -90")
+            sh(f"cd {REPO} && python -u -m qa.submit --sources {SRC} --data {DATA} --model {MODEL} --workers 4 --isolate {' '.join(args)} --out /kaggle/working/submission_{tag}.md 2>&1 | grep -E '^===|answered|budget|format|unanswered|errors|max_' | tail -90")
             continue
         sh(f"cd {REPO} && python -u -m qa.run_dev --sources {SRC} --data {DATA} --model {MODEL} {' '.join(args)} --out /kaggle/working/{name}_{tag}.json 2>&1")
     sh(f"ollama stop {MODEL}")

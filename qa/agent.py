@@ -249,11 +249,14 @@ def _enum_schema(props: dict, required: list[str] | None = None) -> dict:
     return {"type": "object", "properties": props, "required": required or list(props)}
 
 
+THINK_BUDGET = 2000  # extra generated tokens per plan/bind call when thinking is on (the ledger still caps 12,000 per question)
+
+
 def _ask_json(llm: LLM, led: Ledger, msgs: list[dict], schema: dict, tag: str, validate, tries: int = 3, max_tokens: int = 600, think: bool = False):
     """Call with an enforced JSON schema, parse, validate; feed errors back. Returns validated value."""
     last = None
     for k in range(tries):
-        out = llm.chat(msgs, led, think=think, profile="precise" if think else "extract", max_tokens=max_tokens + (800 if think else 0),
+        out = llm.chat(msgs, led, think=think, profile="precise" if think else "extract", max_tokens=max_tokens + (THINK_BUDGET if think else 0),
                        json_mode=schema, tag=f"{tag}{k}")
         try:
             obj = json.loads(out["text"])
@@ -666,7 +669,7 @@ SYS = ("You are a careful municipal data analyst. You never invent values: you o
 
 
 def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
-    led = Ledger()
+    led = Ledger(deadline_s=480.0) if getattr(llm, "think_plan", False) else Ledger()  # thinking needs more wall-clock
     trace: dict = {}
     try:
         srcs = build_sources(files)
