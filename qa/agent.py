@@ -55,6 +55,55 @@ OPS = {
     "explain": "the question asks whether the data SUPPORTS something or what a symbol/flag means (e.g. whether '[z]' entries can be treated as zero); no calculation",
     "text_answer": "the answer is stated in words in a report, guide, readme or metadata document (e.g. publisher, licence, definitions, survey findings, caveats)",
 }
+# what each operation must NOT be used for, and what it returns (shown with OPS in the plan prompt)
+NOT_FOR = {
+    "value": "records/rows of a CSV or map layer (use table_query); questions answered in a report's words (use text_answer)",
+    "change": "a single period; record tables (use table_query)",
+    "percent_of": "a part of a total (use share); record tables",
+    "share": "the same item across periods (use percent_of)",
+    "ratio": "a single total; record tables",
+    "record_lookup": "questions without a specific identifier (use table_query); counting or totals (use table_query)",
+    "count_blank": "ANY question that is not about missing/empty values; counting records that match a condition (use table_query)",
+    "table_query": "facts written in report text (use text_answer); distances/geometry (use spatial); timetables (use transit)",
+    "compare_keys": "ANY question that does not compare identifier lists between two files; counting or totals (use table_query)",
+    "area": "areas of map classes (use raster); points or lines (they have no area)",
+    "raster": "vector layers or tables",
+    "transit": "non-timetable data",
+    "spatial": "attribute counts with no distance (use table_query)",
+    "explain": "questions that need a figure computed from records (use table_query)",
+    "text_answer": "figures that must be computed from data files (use table_query / value / spatial)",
+}
+RETURNS = {
+    "value": "the cell values", "change": "difference and % change", "percent_of": "later as % of earlier", "share": "part / total in %",
+    "ratio": "the quotient", "record_lookup": "the record's fields", "count_blank": "blank count and total", "table_query":
+    "a count / total / mean / min / max / list, optionally per group", "compare_keys": "IDs only in one file, duplicates",
+    "area": "polygon area", "raster": "class areas / shares / change", "transit": "trip counts, route times, stops",
+    "spatial": "counts, distances, nearest feature", "explain": "source notes/definitions", "text_answer": "passages from the documents",
+}
+
+TQ_MANUAL = """TOOL table_query: runs ONE query over the table's records and returns exact counts/totals computed by code.
+FIELDS (strict types, checked against the column types above; every error is reported back to you):
+- filters: list of {column, op, value}; ALL must hold. Each column's type is in the profile (numeric / text / date / JSON).
+  * numeric column: op = | != | > | >= | < | <= with ONE plain number as value (e.g. "20", "0.5"). Never words, ranges or symbols.
+  * text column: op = | != with a value copied exactly from the data (see 'top' values / values found in the question),
+    or contains / not_contains with a short word. < > only for numbers stored as text.
+  * date column: = | < | <= | > | >= with YYYY-MM-DD (a date-only value matches every time on that day).
+  * JSON column: contains / not_contains with the text to find inside.
+  * is_blank / not_blank: value "".
+  * Leave filters empty to use all records.
+- aggregate: count (no target) | count_distinct | sum | mean | median | min | max | list_values | duplicates.
+  sum/mean/median need a NUMERIC target; min/max a numeric or date target.
+- target: the column to aggregate ("" for count).
+- group_by: a category column, only when the question asks per category, the most/least common, or a ranking ("" otherwise).
+- sort: desc (largest first) or asc; top: how many groups to report (1-20).
+RETURNS: the number of matching records out of the total, the aggregate value, per-group values with ties, and the record holding a min/max.
+EXAMPLES:
+- "How many trees taller than 20 m?" -> {"filters":[{"column":"height","op":">","value":"20"}],"aggregate":"count","target":"","group_by":""}
+- "Most common genus on Main Street?" -> {"filters":[{"column":"street","op":"=","value":"Main Street"}],"aggregate":"count","target":"","group_by":"genus","sort":"desc","top":3}
+- "Total cost of type T?" -> {"filters":[{"column":"type","op":"=","value":"T"}],"aggregate":"sum","target":"cost","group_by":""}
+- "How many records lack a date?" -> {"filters":[{"column":"date","op":"is_blank","value":""}],"aggregate":"count","target":"","group_by":""}
+Answer ONLY the part of the question this table can compute; pick filters that match the question's records exactly."""
+
 EXAMPLES = """EXAMPLES (question -> operation):
 - "How much did X's consumption rise from 2020 to 2022, in GWh and percent?" -> change
 - "Which of A, B and C grew most from 2019 to 2021?" -> change
@@ -691,7 +740,7 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             trace["ranked_sources"] = [s.desc[:70] for s in pool]
         by_id = {s.sid: s for s in pool}
         catalog = "\n".join(f"{s.sid}: {s.desc}" for s in pool)
-        ops_txt = "\n".join(f"- {k}: {v}" for k, v in OPS.items())
+        ops_txt = "\n".join(f"- {k}: {v}. NOT FOR: {NOT_FOR[k]}. RETURNS: {RETURNS[k]}." for k, v in OPS.items())
         sim = MEMORY.similar(question, 5)  # experience memory: similar solved patterns (methods, not answers)
         similar_txt = ("SIMILAR SOLVED QUESTIONS (pattern -> operation):\n" + "\n".join(f'- "{ex}" -> {op}' for _, op, _, ex in sim) + "\n\n") if sim else ""
         if sim:
@@ -1066,10 +1115,7 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
             hint = ("Values from the question found in the data: " + "; ".join(hits) + "\n") if hits else ""
             bm = [{"role": "system", "content": SYS},
                   {"role": "user", "content": f"QUESTION: {question}\nCONTEXT: {context}\n\nTABLE {name}\nColumns:\n{profile(df)}\n{hint}\n"
-                                              "Build the query: filters select the records the question is about (op is_blank/not_blank need no value; "
-                                              "use '=' with a value exactly as it appears in the data); aggregate is what to compute "
-                                              "(count needs no target); group_by only if the question asks per category or for the most/least common; "
-                                              "top = how many groups to report. Reply as JSON."}]
+                                              + TQ_MANUAL + " Reply as JSON."}]
 
             def vq(o):
                 o.pop("reasoning", None)
