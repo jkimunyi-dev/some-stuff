@@ -1,0 +1,14 @@
+{
+ "label": "submit qwen3.5:2b (isolated packs)",
+ "updated_utc": "2026-11-16 08:57:23",
+ "elapsed_min": 0.0,
+ "done": 0,
+ "total": 600,
+ "answered": 0,
+ "by_category": {},
+ "by_domain": {},
+ "by_op": {},
+ "max_calls": 0,
+ "max_tokens": 0,
+ "note": "started"
+}
