@@ -1,7 +1,7 @@
 {
  "label": "submit qwen3.5:2b (isolated packs)",
- "updated_utc": "2026-11-16 10:11:54",
- "elapsed_min": 74.5,
+ "updated_utc": "2026-11-16 10:11:55",
+ "elapsed_min": 74.6,
  "done": 600,
  "total": 600,
  "answered": 511,
@@ -46,5 +46,5 @@
  },
  "max_calls": 6,
  "max_tokens": 881,
- "note": "pack 64/64 rc=0"
+ "note": "finished"
 }
