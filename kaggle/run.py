@@ -111,7 +111,12 @@ for MODEL in MODELS:
         print("SKIP: over the 3B class", MODEL)
         continue
     tag = MODEL.replace(":", "_").replace(".", "")
+    BATCH = os.environ.get("QA_BATCH", "")  # e.g. "1": answer only Test rows 0-49 (batch size QA_BATCH_SIZE, default 50)
+    if BATCH:
+        tag += f"_b{int(BATCH):02d}"
     for name, args in RUNS:
+        if name == "SUBMIT" and BATCH:
+            args = args + ["--batch", BATCH, "--batch-size", os.environ.get("QA_BATCH_SIZE", "50")]
         if name == "SUBMIT":  # all 600 Test questions (inference only), resumable, validated, budget-audited
             sh(f"cd {REPO} && python -u -m qa.submit --sources {SRC} --data {DATA} --model {MODEL} --workers {WORKERS} --isolate {' '.join(args)} --out {OUT}/submission_{tag}.md{' --r2-run ' + RUN if RUN and r2.configured() else ''} 2>&1 | grep --line-buffered -E '^===|answered|budget|format|unanswered|errors|max_'")
             continue

@@ -95,8 +95,13 @@ def main():
     ap.add_argument("--isolate", action="store_true", help="answer each pack in a fresh subprocess (memory fully released; a killed pack loses only itself)")
     ap.add_argument("--pack", type=int, default=0, help="(child mode) answer only this 1-based pack index, then exit")
     ap.add_argument("--r2-run", default="", help="push the checkpoint to R2 runs/<name>/ after every pack (resume on any runtime)")
+    ap.add_argument("--batch", type=int, default=0, help="answer only the 1-based batch of Test.csv rows ((B-1)*size .. B*size-1); 0 = all")
+    ap.add_argument("--batch-size", type=int, default=50)
     a = ap.parse_args()
     test = pd.read_csv(Path(a.data) / "Test.csv")
+    if a.batch:  # Test.csv rows are shuffled across domains, so a contiguous slice is a representative sample
+        test = test.iloc[(a.batch - 1) * a.batch_size: a.batch * a.batch_size].reset_index(drop=True)
+        assert len(test), f"batch {a.batch} is empty"
     order = list(test.ID)
     ck = Path(a.out + ".jsonl")
     done = {}
@@ -182,7 +187,8 @@ def isolate_parent(a, test, order, all_packs, ck: Path):
     done = load_done(ck)
     prog.update(list(done.values()), len(order), note="started")
     base = [sys.executable, "-u", "-m", "qa.submit", "--sources", a.sources, "--data", a.data, "--out", a.out, "--model", a.model,
-            "--url", a.url, "--workers", str(a.workers)] + (["--think"] if a.think else [])
+            "--url", a.url, "--workers", str(a.workers)] + (["--think"] if a.think else []) \
+        + (["--batch", str(a.batch), "--batch-size", str(a.batch_size)] if a.batch else [])  # children must index the same packs
     for i, (k, rs) in enumerate(all_packs, 1):
         if all(r.ID in done for r in rs):
             continue
@@ -242,7 +248,8 @@ def finish(a, order, done, prog):
     commit = subprocess.run(["git", "-C", str(Path(__file__).resolve().parent.parent), "rev-parse", "--short", "HEAD"],
                             capture_output=True, text=True).stdout.strip()
     write_run_store(a.out + ".sqlite", order, done, {"run_id": f"{commit}-{time.strftime('%Y%m%d%H%M', time.gmtime())}", "commit": commit,
-                                                     "model": a.model, "url": a.url, "audit": rep})
+                                                     "model": a.model, "url": a.url, "think": a.think,
+                                                     "batch": a.batch, "batch_size": a.batch_size, "audit": rep})
 
 
 if __name__ == "__main__":
