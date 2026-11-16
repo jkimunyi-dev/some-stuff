@@ -132,7 +132,7 @@ def main():
             res = {"answer": "", "evidence": [], "error": f"crash: {type(e).__name__}: {e}", "ledger": {"calls": 0, "tokens": 0, "seconds": 0}, "trace": {}}
         row = {"id": r.ID, "domain": r.Domain, "question": r.Question, "answer": res["answer"], "evidence": res["evidence"], "error": res["error"],
                "ledger": res["ledger"], "op": res["trace"].get("plan", {}).get("op"), "facts": res.get("facts", []),
-               "trace": {k: v for k, v in res["trace"].items() if k in ("plan", "bind", "passages", "named_files")}}
+               "trace": {k: v for k, v in res["trace"].items() if k in ("plan", "bind", "passages", "named_files", "count_pushback", "fallback_from", "fallback_error", "missing_recovery", "op_repair", "query_fixes", "write_fallback")}}
         with lock:
             done[r.ID] = row
             fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
