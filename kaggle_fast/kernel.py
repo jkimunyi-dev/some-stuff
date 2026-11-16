@@ -3,9 +3,9 @@
 # BATCH: 1-based 50-row slice of Test.csv (empty = all 600).
 import subprocess, shutil, os
 REPO = "https://github.com/jkimunyi-dev/some-stuff.git"
-PIN = "60b4b42"
+PIN = "c452d97"
 BATCH = "2"
-PROFILE = "submit_think"
+PROFILE = "submit"
 D = "/kaggle/working/some-stuff"
 shutil.rmtree(D, ignore_errors=True)
 subprocess.run(["git", "clone", REPO, D], check=True)
