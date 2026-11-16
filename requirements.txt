@@ -17,3 +17,4 @@ networkx
 pillow
 pytest
 # optional (Colab / OCR / IFC): ifcopenshell pytesseract  (+ apt: tesseract-ocr poppler-utils)
+boto3

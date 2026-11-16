@@ -30,14 +30,26 @@ def sh(cmd, check=False, **kw):
 
 
 t0 = time.time()
-sh("nvidia-smi --query-gpu=name,memory.total --format=csv; nproc; free -g | head -2; df -h {OUT} | tail -1")
-train = glob.glob(os.environ["QA_DATA"] + "/**/Train.csv", recursive=True) if os.environ.get("QA_DATA") else glob.glob("/kaggle/input/**/Train.csv", recursive=True)
-assert train, "dataset not mounted"
-DATA = Path(train[0]).parent
-print("DATA", DATA, os.listdir(DATA))
-
+sh(f"nvidia-smi --query-gpu=name,memory.total --format=csv; nproc; free -g | head -2; df -h {OUT} | tail -1")
 # --- python deps (kernel image already has most)
 sh(f"pip -q install -r {REPO}/requirements.txt pytest 2>&1 | tail -2")
+sys.path.insert(0, str(REPO))
+from qa import r2  # noqa: E402
+for _k in r2.KEYS + ("GH_TOKEN", "QA_RUN"):  # Colab/Kaggle secrets -> env, so the answering subprocesses inherit them
+    _v = r2.secret(_k)
+    if _v and not os.environ.get(_k):
+        os.environ[_k] = _v
+
+# --- data: QA_DATA folder, else a mounted Kaggle dataset, else the private R2 bucket (any runtime)
+train = glob.glob(os.environ["QA_DATA"] + "/**/Train.csv", recursive=True) if os.environ.get("QA_DATA") else glob.glob("/kaggle/input/**/Train.csv", recursive=True)
+if not train and r2.configured():
+    train = [str(r2.pull_data(Path("/tmp/qa_data")) / "Train.csv")]
+assert train, "no data: set QA_DATA, mount the Kaggle dataset, or add the R2_* secrets"
+DATA = Path(train[0]).parent
+print("DATA", DATA, os.listdir(DATA))
+RUN = os.environ.get("QA_RUN") or (r2.secret("QA_RUN") if r2.configured() else None)  # names the run in R2 (resume + results)
+if RUN and r2.configured():
+    r2.pull_run(RUN, OUT)  # resume: answers already in R2 are skipped
 
 # --- extract sources
 EX = Path("/tmp/extracted")  # NOT /kaggle/working: that would ship 437MB of sources as kernel output
@@ -101,9 +113,11 @@ for MODEL in MODELS:
     tag = MODEL.replace(":", "_").replace(".", "")
     for name, args in RUNS:
         if name == "SUBMIT":  # all 600 Test questions (inference only), resumable, validated, budget-audited
-            sh(f"cd {REPO} && python -u -m qa.submit --sources {SRC} --data {DATA} --model {MODEL} --workers {WORKERS} --isolate {' '.join(args)} --out {OUT}/submission_{tag}.md 2>&1 | grep --line-buffered -E '^===|answered|budget|format|unanswered|errors|max_'")
+            sh(f"cd {REPO} && python -u -m qa.submit --sources {SRC} --data {DATA} --model {MODEL} --workers {WORKERS} --isolate {' '.join(args)} --out {OUT}/submission_{tag}.md{' --r2-run ' + RUN if RUN and r2.configured() else ''} 2>&1 | grep --line-buffered -E '^===|answered|budget|format|unanswered|errors|max_'")
             continue
         sh(f"cd {REPO} && python -u -m qa.run_dev --sources {SRC} --data {DATA} --model {MODEL} {' '.join(args)} --out {OUT}/{name}_{tag}.json 2>&1")
     sh(f"ollama stop {MODEL}")
 (OUT / "MODEL.json").write_text(json.dumps(meta, indent=1))
+if RUN and r2.configured():
+    r2.push_run(RUN, sorted(glob.glob(f"{OUT}/submission_*")) + [str(OUT / "MODEL.json")])
 print("done in", round(time.time() - t0), "s")

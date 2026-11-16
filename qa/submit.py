@@ -94,6 +94,7 @@ def main():
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--isolate", action="store_true", help="answer each pack in a fresh subprocess (memory fully released; a killed pack loses only itself)")
     ap.add_argument("--pack", type=int, default=0, help="(child mode) answer only this 1-based pack index, then exit")
+    ap.add_argument("--r2-run", default="", help="push the checkpoint to R2 runs/<name>/ after every pack (resume on any runtime)")
     a = ap.parse_args()
     test = pd.read_csv(Path(a.data) / "Test.csv")
     order = list(test.ID)
@@ -197,6 +198,12 @@ def isolate_parent(a, test, order, all_packs, ck: Path):
                     fh.write(json.dumps(row, ensure_ascii=False) + "\n")
             done = load_done(ck)
         prog.update(list(done.values()), len(order), note=f"pack {i}/{len(all_packs)} rc={rc}")
+        if a.r2_run:
+            try:
+                from . import r2
+                r2.push_run(a.r2_run, [ck])
+            except Exception as e:  # sync is a convenience: never stop the run for it
+                print("r2 push failed:", type(e).__name__, e, flush=True)
         print(f"=== pack {i}/{len(all_packs)} rc={rc} in {time.time() - t0:.0f}s; {len(done)}/{len(order)} done; lost {len(missing)}", flush=True)
     finish(a, order, done, prog)
 
