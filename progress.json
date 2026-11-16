@@ -1,15 +1,15 @@
 {
  "label": "submit qwen3.5:2b (isolated packs)",
- "updated_utc": "2026-11-16 09:51:45",
- "elapsed_min": 54.4,
- "done": 475,
+ "updated_utc": "2026-11-16 09:52:44",
+ "elapsed_min": 55.4,
+ "done": 479,
  "total": 600,
- "answered": 409,
+ "answered": 412,
  "by_category": {
-  "answered": 409,
+  "answered": 412,
   "value not found": 25,
   "format check": 1,
-  "bind invalid": 36,
+  "bind invalid": 37,
   "identifier not found": 1,
   "crash": 1,
   "op/source mismatch": 1,
@@ -17,8 +17,8 @@
  },
  "by_domain": {
   "transport": {
-   "done": 114,
-   "answered": 110
+   "done": 118,
+   "answered": 113
   },
   "buildings_energy": {
    "done": 219,
@@ -30,7 +30,7 @@
   }
  },
  "by_op": {
-  "table_query": 189,
+  "table_query": 192,
   "explain": 91,
   "compare_keys": 19,
   "spatial": 6,
@@ -46,5 +46,5 @@
  },
  "max_calls": 6,
  "max_tokens": 881,
- "note": "pack 27/64 rc=0"
+ "note": "pack 28/64 rc=0"
 }
