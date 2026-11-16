@@ -1,18 +1,19 @@
 {
  "label": "submit qwen3.5:2b (isolated packs)",
- "updated_utc": "2026-11-16 09:32:40",
- "elapsed_min": 35.3,
- "done": 369,
+ "updated_utc": "2026-11-16 09:45:34",
+ "elapsed_min": 48.2,
+ "done": 393,
  "total": 600,
- "answered": 314,
+ "answered": 334,
  "by_category": {
-  "answered": 314,
-  "value not found": 17,
+  "answered": 334,
+  "value not found": 20,
   "format check": 1,
   "bind invalid": 34,
   "identifier not found": 1,
   "crash": 1,
-  "op/source mismatch": 1
+  "op/source mismatch": 1,
+  "time cap": 1
  },
  "by_domain": {
   "transport": {
@@ -20,8 +21,8 @@
    "answered": 81
   },
   "buildings_energy": {
-   "done": 144,
-   "answered": 114
+   "done": 168,
+   "answered": 134
   },
   "urban_greenery": {
    "done": 141,
@@ -29,14 +30,14 @@
   }
  },
  "by_op": {
-  "table_query": 150,
-  "explain": 63,
-  "compare_keys": 14,
+  "table_query": 165,
+  "explain": 66,
+  "compare_keys": 15,
   "spatial": 6,
   "text_answer": 33,
   "area": 4,
   "record_lookup": 6,
-  "count_blank": 9,
+  "count_blank": 10,
   "raster": 11,
   "transit": 11,
   "percent_of": 2,
@@ -44,6 +45,6 @@
   "change": 3
  },
  "max_calls": 6,
- "max_tokens": 821,
- "note": "pack 20/64 rc=0"
+ "max_tokens": 881,
+ "note": "pack 21/64 rc=0"
 }
