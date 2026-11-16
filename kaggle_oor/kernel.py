@@ -2,7 +2,7 @@
 # Bootstrap only: all logic lives in the repo (kaggle/run.py).
 import subprocess, shutil, os
 REPO = "https://github.com/jkimunyi-dev/some-stuff.git"
-PIN = "out-of-rules"   # branch or commit
+PIN = "8ca1f60"   # X1: lessons 1-4 code + 3B gate lifted
 BATCH = "3"
 PROFILE = "submit"
 MODEL = "qwen2.5:7b"   # X1: bigger than the 3B rule allows
