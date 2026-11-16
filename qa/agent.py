@@ -26,6 +26,7 @@ from .raster_op import TASKS as RASTER_TASKS, RasterError, legend as raster_lege
 from .transit_op import MODELS as TRANSIT_MODELS, TASKS as TRANSIT_TASKS, TransitError, feed_for, run_transit, stop_options, trip_options
 from .gtfs import LOCATION_TYPES
 from .spatial_op import TASKS as SPATIAL_TASKS, SpatialError, anchor_options, run_spatial, stated_crs
+import os
 from .memory import Memory
 from .query import AGGS, FILTER_OPS, QueryError, check_query, json_records, profile, run_query, sheet_records, value_hits
 from .textqa import TEXT_SUFFIXES, Index
@@ -148,6 +149,11 @@ GENERIC_NAME_WORDS = {"data", "dataset", "report", "readme", "guide", "source", 
 _SRC_CACHE: dict = {}
 _IDX_CACHE: dict = {}
 MEMORY = Memory()  # experience memory (methods from approved dev data; never Test answers)
+# OUT-OF-RULES (X2, branch out-of-rules only): teacher bank from judged Test questions, enabled by QA_TEACHER=1
+TEACHER = None
+if os.environ.get("QA_TEACHER") == "1":
+    from .memory import TeacherBank
+    TEACHER = TeacherBank()
 import threading
 _LOCKS: dict = {}
 _LOCKS_GUARD = threading.Lock()
@@ -771,6 +777,14 @@ def answer(llm: LLM, question: str, context: str, files: list[Path]) -> dict:
         ops_txt = "\n".join(f"- {k}: {v}. NOT FOR: {NOT_FOR[k]}. RETURNS: {RETURNS[k]}." for k, v in OPS.items())
         sim = MEMORY.similar(question, 5)  # experience memory: similar solved patterns (methods, not answers)
         similar_txt = ("SIMILAR SOLVED QUESTIONS (pattern -> operation):\n" + "\n".join(f'- "{ex}" -> {op}' for _, op, _, ex in sim) + "\n\n") if sim else ""
+        if TEACHER is not None:  # OUT-OF-RULES (X2): teacher-labelled Test examples
+            tsim = TEACHER.similar(question, 3)
+            if tsim:
+                trace["teacher"] = [round(s, 1) for s, _ in tsim]
+                similar_txt = ("WORKED EXAMPLES FROM A TEACHER (similar questions, how they were solved):\n"
+                               + "\n".join(f'- Q: "{it["question"][:220]}"\n  operation: {it["op"]}; files: {", ".join(it["files"])}\n  method: {it["method"]}\n'
+                                           f'  a complete answer gives: {it["answer_shape"]}' for _, it in tsim) + "\n\n" + similar_txt)
+                context = context + "\nMETHOD NOTES from similar solved questions: " + " | ".join(it["method"] for _, it in tsim[:2])
         if sim:
             trace["memory"] = [op for _, op, _, _ in sim]
         # ---- call 1: operation + sources

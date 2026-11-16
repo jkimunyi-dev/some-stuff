@@ -1,0 +1,2006 @@
+[
+ {
+  "question": "For Wajir in scenario 7, what share is outside the one-hour zone? Please carry through the table’s uncertainty range as well, without relabelling it as a 95% confidence interval.",
+  "op": "text_answer",
+  "files": [
+   "kenya.html"
+  ],
+  "method": "Find the named county row and scenario column in the paper's population-access table (Table 3); take the printed within-1-hour percentage and its uncertainty bounds, and derive outside = 100 minus within, with bounds 100 minus the upper and 100 minus the lower bound. Call it the table's uncertainty range, not a 95% CI.",
+  "answer_shape": "within % [range] + outside % + outside range + table citation"
+ },
+ {
+  "question": "Can our briefing say that almost 69% of Burgos bus stops were fully accessible, based on that critical-access percentage?",
+  "op": "text_answer",
+  "files": [
+   "burgos.html"
+  ],
+  "method": "Locate the paper's results on the share of stops meeting all critical access-to-stop (CA) requirements versus all critical stop (CS) and non-critical requirements; explain that the quoted percentage covers access-to-stop only and report how many stops met all requirements.",
+  "answer_shape": "Yes/No + what the % actually measures (n stops) + count fully accessible"
+ },
+ {
+  "question": "Are Pioneer Livery and the Occidental Hotel on opposite sides of Allen Street, or in the same block? Give the block number and the four surrounding streets.",
+  "op": "text_answer",
+  "files": [
+   "tombstone-2.jpg",
+   "Analysis.md"
+  ],
+  "method": "Read the map sheet that shows both named buildings, identify the block number containing each, and read the street names on the block's four sides using the legend and Analysis reading conventions.",
+  "answer_shape": "Same block / opposite sides + block number + sheet + four bounding streets with directions"
+ },
+ {
+  "question": "What period have we actually been given, and how do the yr codes map to calendar years? Please include the number of daily records.",
+  "op": "table_query",
+  "files": [
+   "day.csv",
+   "Readme.txt"
+  ],
+  "method": "Take min and max of dteday and count the rows in day.csv (also count hour.csv rows if helpful); map yr codes to years from the Readme/metadata and check they agree.",
+  "answer_shape": "date range + yr code mapping + daily record count"
+ },
+ {
+  "question": "There are quite a few OsmRoad records. Can I call that the number of separate roads? Give me a concrete counterexample from this snapshot.",
+  "op": "table_query",
+  "files": [
+   "helsinki_graph.sqlite",
+   "SourceGuide.md"
+  ],
+  "method": "Count records with the exact OsmRoad label, broken down by OSM object type (way/node/relation); then group OsmRoad records by name to find one street split across many records as the counterexample.",
+  "answer_shape": "No + record count + per-type split + named counterexample with its record count"
+ },
+ {
+  "question": "For the pragmatic scenario, what national figures should I quote for people within one hour and people outside two hours? Give both population counts and percentages. Are those complementary groups?",
+  "op": "text_answer",
+  "files": [
+   "kenya.html"
+  ],
+  "method": "From the paper's national results for the pragmatic scenario (vii), read the population (millions) and percentage within 1 hour and outside 2 hours; add the two percentages to show they do not sum to 100 because a 1-2 hour group remains.",
+  "answer_shape": "both counts + both % + No, not complementary + remaining share"
+ },
+ {
+  "question": "How many checklist requirements are critical and non-critical, and how are they split between reaching the stop and the stop itself?",
+  "op": "text_answer",
+  "files": [
+   "burgos.html"
+  ],
+  "method": "Read the paper's checklist table (Table 3) and count requirements by critical/non-critical and by access-to-stop vs stop category (CA, CS, NCA, NCS).",
+  "answer_shape": "critical total (CA + CS) + non-critical total (NCA + NCS) + grand total"
+ },
+ {
+  "question": "Between Garissa and Wajir, which has lower total transport-asset ownership, and which has the lower pragmatic one-hour access share? Give both pairs of values; do not treat the ownership total as the access measure.",
+  "op": "text_answer",
+  "files": [
+   "kenya.html"
+  ],
+  "method": "Read the two counties' transport-asset ownership totals from the ownership table (Table 1) and their scenario-7 one-hour access shares from Table 3; compare each pair separately.",
+  "answer_shape": "lower-ownership county + both values + lower-access county + both values + table citations"
+ },
+ {
+  "question": "What is the average daily cnt on working days versus other days? Use the supplied workingday flag and one observation per date.",
+  "op": "table_query",
+  "files": [
+   "day.csv"
+  ],
+  "method": "Group day.csv rows (one per date) by workingday and take the mean of cnt for each group, also reporting the number of days in each group.",
+  "answer_shape": "mean cnt workingday=1 (n days) + mean cnt workingday=0 (n days)"
+ },
+ {
+  "question": "The Blackburn Lift 1 record has no wheelchair_boarding value. Should I label it inaccessible, or look at its parent? What does the parent record say?",
+  "op": "transit",
+  "files": [
+   "stops.txt"
+  ],
+  "method": "Find the named lift record in stops.txt, read its wheelchair_boarding (blank means inherit), then look up its parent_station record and report that parent's wheelchair_boarding value.",
+  "answer_shape": "stop_id + blank value + parent id/name + parent wheelchair_boarding"
+ },
+ {
+  "question": "For the walking approach, should we describe tree pits and manhole covers as having the same reported condition? Give the figures for each.",
+  "op": "text_answer",
+  "files": [
+   "burgos.html"
+  ],
+  "method": "Find the paper's reported percentages for flush manhole covers/gratings and for uncovered or non-flush tree surrounds on the walking approach; note they describe different conditions.",
+  "answer_shape": "No + manhole % + tree-pit %"
+ },
+ {
+  "question": "A colleague filtered for Sunday services to find that arrival. Which service day should they check instead, and is this trip active on it?",
+  "op": "transit",
+  "files": [
+   "trips.txt",
+   "calendar_dates.txt"
+  ],
+  "method": "Use the service day given in the context (not the calendar day of arrival, since times past 24:00 belong to the previous service day); look up the trip's service_id and check calendar/calendar_dates for that date, and read its arrival time at the destination stop.",
+  "answer_shape": "service day to check + active Yes/No (service_id) + arrival time and real calendar date"
+ },
+ {
+  "question": "For the first hourly record, the old Readme and current publisher metadata would give me different Celsius temperatures. Work out temp under each stated convention and make the disagreement explicit.",
+  "op": "record_lookup",
+  "files": [
+   "hour.csv",
+   "publisher_metadata.json"
+  ],
+  "method": "Read normalised temp of the first hourly record; convert with the Readme formula (t x 41) and with the publisher-metadata formula (-8 + 47 x t), then give the difference.",
+  "answer_shape": "raw temp + Readme Celsius + metadata Celsius + difference"
+ },
+ {
+  "question": "Why does one legend call season 1 spring and another call it winter? What do the two supplied documents actually say?",
+  "op": "text_answer",
+  "files": [
+   "Readme.txt",
+   "publisher_metadata.json"
+  ],
+  "method": "Quote the season code legend from each document (Readme vs publisher metadata) and state how they differ.",
+  "answer_shape": "Readme mapping + metadata mapping"
+ },
+ {
+  "question": "Did the hourly export drop leap day altogether? Check 29 February 2012 and tell me how many hourly rows it has and which hour label is absent.",
+  "op": "table_query",
+  "files": [
+   "hour.csv"
+  ],
+  "method": "Filter hour.csv to dteday = the leap date, count the rows and list which hr values 0-23 are absent.",
+  "answer_shape": "present Yes/No + row count + missing hour label"
+ },
+ {
+  "question": "Our draft headline says ‘71% of road deaths in Kenya were pedestrians’. Can you check the 71% finding and give me a headline that keeps the place and period right?",
+  "op": "text_answer",
+  "files": [
+   "Kenya_Road_Safety_Report_Excerpt.pdf",
+   "PageMap.json"
+  ],
+  "method": "Find the pedestrian share of deaths in the report and check its geographic scope and years; cite the physical excerpt page and rewrite the headline with the correct place and period.",
+  "answer_shape": "figure + correct place + period + page + corrected headline"
+ },
+ {
+  "question": "The audit flagged a zero-year-old driver in collision 2025010606376, vehicle 1, casualty 1. Can you check the casualty age, the associated driver age and the casualty’s role before we change anything?",
+  "op": "record_lookup",
+  "files": [
+   "dft-road-casualty-statistics-casualty-2025.csv",
+   "dft-road-casualty-statistics-vehicle-2025.csv"
+  ],
+  "method": "Look up the casualty row by collision_index, vehicle_reference and casualty_reference; read age_of_casualty and casualty_class, then look up the same vehicle in the vehicle file for vehicle_type and age_of_driver; decode codes with the data guide.",
+  "answer_shape": "casualty age + casualty role + vehicle type + driver age + driver/not driver"
+ },
+ {
+  "question": "For the second journey in this case, how long is the scheduled end-to-end trip in seconds? Does its arrival fall on the following calendar date?",
+  "op": "transit",
+  "files": [
+   "stop_times.txt"
+  ],
+  "method": "Take the trip's rows in stop_times.txt; use departure_time at the minimum stop_sequence and arrival_time at the maximum; subtract in seconds (times may exceed 24:00) and convert any >24h arrival to the next calendar date.",
+  "answer_shape": "first/last stop + times + duration seconds + next-date Yes/No with calendar time"
+ },
+ {
+  "question": "I downloaded operator A. Is that enough for the complete set of routes in our supplied Seremban package? If not, how many additional route IDs does B contribute?",
+  "op": "compare_keys",
+  "files": [
+   "seremban_a.zip",
+   "seremban_b.zip"
+  ],
+  "method": "Compare route_id values in routes.txt of the two GTFS archives: count IDs in each, IDs shared, and IDs only in B.",
+  "answer_shape": "No + route IDs in A + in B + shared + added by B (total)"
+ },
+ {
+  "question": "Who publishes this feed, and which time zone should we use for its stop times?",
+  "op": "text_answer",
+  "files": [
+   "agency.txt"
+  ],
+  "method": "Read agency_name and agency_timezone from agency.txt.",
+  "answer_shape": "publisher name + time zone"
+ },
+ {
+  "question": "Before we use weekday filters, can you check the day_of_week code against the actual calendar date across the GB collision file? How many disagree?",
+  "op": "table_query",
+  "files": [
+   "dft-road-casualty-statistics-collision-2025.csv",
+   "dft-road-casualty-statistics-road-safety-open-dataset-data-guide-2025.xlsx"
+  ],
+  "method": "Parse the dd/mm/yyyy date of every collision, derive its weekday using the guide's coding (1=Sunday ... 7=Saturday), and count rows where it differs from day_of_week, out of all rows.",
+  "answer_shape": "mismatch count of total rows + coding convention"
+ },
+ {
+  "question": "If we copy the bus-safety information idea, does it matter whether passengers get a private leaflet or whether the station also publicly announces GPS tracking? What changed in the study, and what exactly fell by 25%?",
+  "op": "text_answer",
+  "files": [
+   "Kenya_Road_Safety_Report_Excerpt.pdf",
+   "PageMap.json"
+  ],
+  "method": "Find the report's description of the bus-safety information experiment: what private pamphlets alone did, what changed once public GPS-tracking announcements were added, and which measure fell by 25% and for which companies; cite the physical page.",
+  "answer_shape": "Yes it matters + pamphlet-only effect + effect with public announcement + what fell 25% and for whom"
+ },
+ {
+  "question": "Could I use the supplied Kenya study to tell a resident which side of their street has a safe step-free route to the nearest town?",
+  "op": "explain",
+  "files": [
+   "kenya.html"
+  ],
+  "method": "Check the paper's method: modelled travel time to urban centres at its grid resolution and physical access only; state whether that supports street-side or step-free route advice.",
+  "answer_shape": "No + what the study models (resolution, physical access) + what it lacks"
+ },
+ {
+  "question": "For the selected through pair, does the feed let the rider remain on board? How much scheduled time separates the incoming arrival and onward departure?",
+  "op": "transit",
+  "files": [
+   "transfers.txt",
+   "stop_times.txt"
+  ],
+  "method": "Find the transfers.txt row for the from/to trip pair at the stop; read transfer_type (4 = in-seat) and block_id in trips.txt, then subtract the incoming trip's arrival_time from the onward trip's departure_time at that stop.",
+  "answer_shape": "Yes/No stay on board + transfer_type/stop + arrival + departure + gap in minutes and seconds"
+ },
+ {
+  "question": "Can I join the daily and hourly tables on instant? For example, what does instant 2 refer to in each file?",
+  "op": "record_lookup",
+  "files": [
+   "day.csv",
+   "hour.csv"
+  ],
+  "method": "Look up instant = the given value in each file and report its dteday (and hr in hour.csv) to show instant is a per-file row index; recommend joining on dteday (plus hr).",
+  "answer_shape": "No + what instant means in each file + correct join key"
+ },
+ {
+  "question": "What surface should we describe for the streets and sidewalks in this historical snapshot? I do not want to call both of them paved.",
+  "op": "text_answer",
+  "files": [
+   "tombstone-1.jpg",
+   "tombstone-2.jpg"
+  ],
+  "method": "Read the map sheet notes/legend describing street and sidewalk surfaces and report each separately.",
+  "answer_shape": "street surface + sidewalk surface"
+ },
+ {
+  "question": "Our graph loader drops links whose traversal_time is zero. How many source links would that remove? Should it do that under the study rule, and do zero values prove physically instantaneous travel?",
+  "op": "table_query",
+  "files": [
+   "pathways.txt",
+   "ReadingGuide.txt"
+  ],
+  "method": "Count pathways rows with traversal_time = 0 (note their pathway_mode); state from the routing rule that recorded zeros are kept and that zero is a recorded value, not proof of instantaneous travel.",
+  "answer_shape": "count (mode) + should not drop + zero not proof"
+ },
+ {
+  "question": "Can we present the supplied 2025 collision total as all road incidents across the UK, including Northern Ireland and damage-only crashes? What would be an accurate description?",
+  "op": "explain",
+  "files": [
+   "Publisher.html",
+   "Understanding-historical-road-safety-data.txt"
+  ],
+  "method": "Read the publisher's scope statement for STATS19: geography covered, which collisions are recorded (personal injury, public roads, reported to police) and what is excluded; state whether the proposed description is supported.",
+  "answer_shape": "No + correct geography + collision scope + exclusions"
+ },
+ {
+  "question": "I treated 28 December as an ordinary Monday. Which service actually remains after the exception, and how many trips does it give?",
+  "op": "transit",
+  "files": [
+   "calendar_dates.txt",
+   "trips.txt"
+  ],
+  "method": "Check calendar_dates.txt for the date: exception_type 2 removes a service, 1 adds; determine which service_ids remain active on that date (calendar weekday plus exceptions) and count trips in trips.txt for the remaining service.",
+  "answer_shape": "removed service + remaining service + trip count"
+ },
+ {
+  "question": "Can we call the passenger-station CSV a complete one-to-one copy of the newer XML’s StopPlaces? Match by station GUID and report how many are shared and how many occur on only one side.",
+  "op": "compare_keys",
+  "files": [
+   "passenger-stations.csv",
+   "NeTEx_20261102.xml"
+  ],
+  "method": "Extract station GUIDs from the CSV and StopPlace IDs/GUIDs from the XML; count shared, only-in-XML and only-in-CSV values.",
+  "answer_shape": "Yes/No one-to-one + shared count + only-XML + only-CSV"
+ },
+ {
+  "question": "My stop count is 2,389 after concatenating the files. How many different stop IDs does that represent, and can I call it the number of physical bus stops?",
+  "op": "table_query",
+  "files": [
+   "seremban_a.zip",
+   "seremban_b.zip"
+  ],
+  "method": "Concatenate stops.txt from both archives; count rows, distinct stop_id (and the overlap between feeds), and distinct coordinate pairs to show stop IDs are not physical stops.",
+  "answer_shape": "distinct stop_id count (per feed + shared) + No not physical stops + reason"
+ },
+ {
+  "question": "Someone has written ‘35% of matatu stops caused a fatal crash’ on the slide. What should it actually say? Please check the distance too, and whether this tells us anything causal.",
+  "op": "text_answer",
+  "files": [
+   "Kenya_Road_Safety_Report_Excerpt.pdf",
+   "PageMap.json"
+  ],
+  "method": "Find the matatu-stop statistic: what population the 35% refers to (deaths, city, years) and the distance threshold; note whether the report presents it as descriptive or causal.",
+  "answer_shape": "corrected statement + distance + place/period + not causal"
+ },
+ {
+  "question": "My colleague needs that arrival in UTC. What UTC date and time corresponds to the destination row?",
+  "op": "transit",
+  "files": [
+   "stop_times.txt",
+   "agency.txt"
+  ],
+  "method": "Take the trip's arrival_time at the destination stop on the given service day; convert hours >= 24 to the next calendar date in agency_timezone, then subtract the local UTC offset (daylight saving in effect) to get UTC.",
+  "answer_shape": "service-day time + local date/time + UTC date/time + offset"
+ },
+ {
+  "question": "I can leave the Port Dickson terminal at 07:25. What is my earliest scheduled arrival at Nilai Sentral, and which buses would get me there under the briefing's transfer assumptions?",
+  "op": "transit",
+  "files": [
+   "seremban_a.zip",
+   "seremban_b.zip"
+  ],
+  "method": "Search itineraries from the origin stop after the start time on the context date, allowing transfers within the interchange group with at least the stated minimum gap and respecting pickup/drop-off restrictions; choose the earliest arrival at the destination.",
+  "answer_shape": "earliest arrival + each leg (route, trip, board/alight times, transfer stop)"
+ },
+ {
+  "question": "If a village is inside the pragmatic one-hour zone, does the paper establish that residents can afford the journey and obtain the services they need?",
+  "op": "explain",
+  "files": [
+   "kenya.html"
+  ],
+  "method": "Check the paper's stated scope/limitations: it measures physical travel time only and does not account for affordability or social/economic access.",
+  "answer_shape": "No + what the study covers + what it excludes"
+ },
+ {
+  "question": "I want the fastest modelled route without stairs to platform 9, rather than the closest entrance on a map. Which entrance wins, and how long does it take?",
+  "op": "transit",
+  "files": [
+   "pathways.txt",
+   "stops.txt"
+  ],
+  "method": "Find all entrance/exit records (location_type 2) of the platform's parent station and compute the shortest directed path to the platform through pathways.txt using traversal_time, with only step-free modes allowed; pick the minimum.",
+  "answer_shape": "winning entrance (name + stop_id) + route time in seconds/minutes"
+ },
+ {
+  "question": "What >=6 m raw-difference area falls in the Inspection corridor? Is that enough to tell a bus operator that the route is obstructed?",
+  "op": "raster",
+  "files": [
+   "surface.tif",
+   "terrain.tif"
+  ],
+  "method": "Compute DSM minus DTM per pixel, keep pixels with difference >= threshold whose centres lie inside the named StudyAreas.geojson polygon, and multiply pixel count by pixel area; then explain that height difference is unlabelled and the area is hypothetical, not a route obstruction.",
+  "answer_shape": "area m2 (pixel count) + No + reason"
+ },
+ {
+  "question": "Someone filtered all GB casualties to casualty_type 23 and called the result an e-scooter total. How many rows did that select, and is the supplied codebook enough to justify that label?",
+  "op": "table_query",
+  "files": [
+   "dft-road-casualty-statistics-casualty-2025.csv",
+   "dft-road-casualty-statistics-road-safety-open-dataset-data-guide-2025.xlsx"
+  ],
+  "method": "Count casualty rows with casualty_type = 23; look up code 23 in the data guide to show all labels it carries and whether any e-scooter flag exists.",
+  "answer_shape": "row count + code labels in guide + label justified Yes/No"
+ },
+ {
+  "question": "The destination time says 27:49. What calendar date and local clock time should I tell someone meeting this train?",
+  "op": "transit",
+  "files": [
+   "stop_times.txt",
+   "agency.txt"
+  ],
+  "method": "Convert the >24:00 arrival time on the given service day to the next calendar date and local clock time (agency_timezone), naming the weekday.",
+  "answer_shape": "local clock time + weekday + calendar date"
+ },
+ {
+  "question": "I can board at Terminal One at 08:10. Comparing direct N50 and N52 buses only, which departure should I take to reach Nilai Sentral earliest, and when would I arrive?",
+  "op": "transit",
+  "files": [
+   "seremban_a.zip",
+   "seremban_b.zip"
+  ],
+  "method": "On the context date, list direct trips of the named routes departing the boarding stop at or after the given time that reach the destination; pick the earliest arrival (report ties).",
+  "answer_shape": "departure time + route/trip (ties) + arrival time"
+ },
+ {
+  "question": "Christmas Day 2012 was a Tuesday. Does that make it a working day in this dataset? Check the supplied flags and explain.",
+  "op": "record_lookup",
+  "files": [
+   "day.csv"
+  ],
+  "method": "Look up the day.csv row for the given date and read its holiday and workingday flags; explain that workingday = 0 when the day is a holiday or weekend.",
+  "answer_shape": "No + holiday flag + workingday flag"
+ },
+ {
+  "question": "For a hypothetical 08:57:30 departure, use our model without stairs and add a 30-second boarding buffer. What total time budget is required, and what is the latest start at the Williams St entrance?",
+  "op": "transit",
+  "files": [
+   "pathways.txt",
+   "stops.txt"
+  ],
+  "method": "Compute the shortest directed step-free path (allowed modes only) from the named entrance to the platform using traversal_time; add the stated buffer and subtract the total from the departure time.",
+  "answer_shape": "route seconds + buffer + total budget + latest start time"
+ },
+ {
+  "question": "How many airport-bound N57 departures leave Nilai Sentral from 07:00 up to, but not including, 09:00? Please give me the departure times too.",
+  "op": "transit",
+  "files": [
+   "seremban_a.zip"
+  ],
+  "method": "On the context date, filter stop_times for the named route's trips toward the stated destination at the given stop with departure_time in [start, end); count and list the departure times.",
+  "answer_shape": "count + list of departure times + route/headsign"
+ },
+ {
+  "question": "Which travel scenario should I use if I want the paper’s “most pragmatic” estimate, and what journey does it represent?",
+  "op": "text_answer",
+  "files": [
+   "kenya.html"
+  ],
+  "method": "Find where the paper calls a scenario the most pragmatic; report its scenario number, the journey modes it represents and its headline travel-time/one-hour figures.",
+  "answer_shape": "scenario number + journey description (+ key figures)"
+ },
+ {
+  "question": "La Trobe St is marked accessible. Does the supplied graph give us a route without stairs from that entrance to platform 1 under our rule? Explain what we can conclude.",
+  "op": "transit",
+  "files": [
+   "pathways.txt",
+   "stops.txt"
+  ],
+  "method": "Trace pathways from the named entrance under the step-free mode set (directed); report whether any path reaches the platform and which link mode (e.g. stairs) blocks it; note an accessibility flag is not a route guarantee.",
+  "answer_shape": "No/Yes route + the blocking link + conclusion about the flag"
+ },
+ {
+  "question": "For 2 January 2011, which hour label is absent? Compare the mean normalised temp over recorded hours with a mean that inserts zero for the absent hour and divides by 24. Give both to six decimals; which matches the daily temp to that precision?",
+  "op": "table_query",
+  "files": [
+   "hour.csv",
+   "day.csv"
+  ],
+  "method": "Filter hour.csv to the date, find the missing hr label; compute mean temp over recorded rows and sum/24 (zero for missing hour), to six decimals; compare both with day.csv temp for that date.",
+  "answer_shape": "missing hour + recorded mean + zero-filled mean + which matches daily"
+ },
+ {
+  "question": "Does cnt always equal casual plus registered? Check both files rather than just the first few rows.",
+  "op": "table_query",
+  "files": [
+   "day.csv",
+   "hour.csv"
+  ],
+  "method": "In each file count rows where cnt != casual + registered, out of all rows.",
+  "answer_shape": "Yes/No + mismatch count and row count per file"
+ },
+ {
+  "question": "Our developer made every pathway bidirectional and now gets a 36-second return. By how many seconds does that understate the correct modelled return?",
+  "op": "transit",
+  "files": [
+   "pathways.txt",
+   "stops.txt"
+  ],
+  "method": "Compute the correct shortest directed step-free path from entrance to platform respecting is_bidirectional; subtract the stated naive bidirectional time to get the understatement.",
+  "answer_shape": "correct seconds (path) + naive seconds + understatement seconds"
+ },
+ {
+  "question": "Before unioning the supplied crown drawing, validate its 2D polygons in our projected system. Which tree’s geometry fails, and should we quietly drop that row to return an area?",
+  "op": "spatial",
+  "files": [
+   "crown-drawing-view.geojson"
+  ],
+  "method": "Validate each 2D polygon in EPSG:2056 (e.g. shapely is_valid/explain_validity) without repairing; report the invalid feature's identifiers and the reason; do not drop or fix it silently.",
+  "answer_shape": "invalid tree ID(s) + reason/location + count checked + do not drop, report defect"
+ },
+ {
+  "question": "How many green-space users said their physical health had improved, and how many said it had not?",
+  "op": "text_answer",
+  "files": [
+   "accra.html"
+  ],
+  "method": "Read the green-space users table (Table 4) for physical health improved: Yes and No counts and percentages with n.",
+  "answer_shape": "Yes count (%) + No count (%) + n"
+ },
+ {
+  "question": "For a hypothetical outreach service I want to count users whose preferred green space is less than 150 metres from home. Can we get one exact count from the published distance bands? If not, give the tightest possible minimum and maximum.",
+  "op": "text_answer",
+  "files": [
+   "accra.html"
+  ],
+  "method": "Read the distance-to-green-space bands with counts; sum bands fully below the threshold for the minimum and add the band straddling the threshold for the maximum.",
+  "answer_shape": "No exact count + relevant bands + min + max"
+ },
+ {
+  "question": "For a quick map-layout check only, what are the bounding-rectangle areas of relations 64489 and 76186 in hectares? Please don’t label them actual green-space areas.",
+  "op": "area",
+  "files": [
+   "helsinki_graph.sqlite",
+   "SourceProjection.json"
+  ],
+  "method": "For each named OSM relation with the exact label, take its geometry in EPSG:3879, compute the bounding-rectangle (envelope) area in m2 and convert to hectares; label them as envelopes, not green-space areas.",
+  "answer_shape": "envelope area ha per relation (with name) + caveat"
+ },
+ {
+  "question": "The teaching grid has a cell size of 10. How much area does one cell cover in square metres? I nearly treated that as 10 metres by 10 metres.",
+  "op": "text_answer",
+  "files": [
+   "ReadingGuide.md",
+   "SurveyMetadata.xml"
+  ],
+  "method": "Get the horizontal unit of the grid from metadata (US survey feet); cell area = size squared in square US survey feet, converted with 1 ftUS = 1200/3937 m.",
+  "answer_shape": "cell side units + area in ftUS2 + area in m2 + not 100 m2"
+ },
+ {
+  "question": "Is the local tree number standortnr enough to identify a record? For example, how many park records have the exact value “7”, and which native field is documented as the technical key?",
+  "op": "table_query",
+  "files": [
+   "anlagenbaeume.geojson",
+   "anlagenbaeume.schema.xsd"
+  ],
+  "method": "Count records with standortnr exactly '7' (string) in each layer; read the XSD documentation for which field is the technical key (gisid).",
+  "answer_shape": "No + count per layer + technical key field"
+ },
+ {
+  "question": "What owner label is recorded for these returned trees, and how many have that label? Please report the register field rather than making a separate legal ownership determination.",
+  "op": "table_query",
+  "files": [
+   "anlagenbaeume.geojson",
+   "strassenbaeume.geojson"
+  ],
+  "method": "Group all records of both layers by eigentuemer and count; report the label(s) and counts per layer and total.",
+  "answer_shape": "owner label + count (park + street = total)"
+ },
+ {
+  "question": "Among the green-space users, how many said they went at least once a week? Please give the count and percentage, without including monthly or occasional visitors.",
+  "op": "text_answer",
+  "files": [
+   "accra.html"
+  ],
+  "method": "Read the visit-frequency table for green-space users; sum the categories that are at least weekly (daily and weekly categories, not monthly/occasional) and divide by n.",
+  "answer_shape": "count + % of n + included categories"
+ },
+ {
+  "question": "Can you give me a street-versus-off-street split for Outremont by counting INV_TYPE? The rows have street addresses.",
+  "op": "count_blank",
+  "files": [
+   "outremont.csv",
+   "dictionary.pdf"
+  ],
+  "method": "Count records with blank INV_TYPE out of all records; if all are blank, no split is possible and addresses do not substitute.",
+  "answer_shape": "No + blank count of total + reason"
+ },
+ {
+  "question": "I have GML, GeoJSON and GeoPackage downloads. How many distinct registered trees do we actually have, split between park and street layers? I do not want to count the same export three times.",
+  "op": "table_query",
+  "files": [
+   "anlagenbaeume.geojson",
+   "strassenbaeume.geojson"
+  ],
+  "method": "Use one format only; count distinct gisid in each layer and check overlap; total = park + street.",
+  "answer_shape": "distinct total + park count + street count + formats are same records"
+ },
+ {
+  "question": "For park tree 00008100_0014f10e, a colleague read stammumfg=100 as a diameter in metres. What does that field actually mean, and what is the value in metres?",
+  "op": "text_answer",
+  "files": [
+   "anlagenbaeume.schema.xsd",
+   "anlagenbaeume.geojson"
+  ],
+  "method": "Look up the field's documentation in the XSD (stammumfg = trunk circumference in cm) and convert the record's value to metres.",
+  "answer_shape": "field meaning + unit + value in m"
+ },
+ {
+  "question": "The inventory has x and y values in the millions, while its GeoJSON coordinates are around 8.5 and 47.3. Can I mix those numbers directly in the same 75 m distance calculation?",
+  "op": "explain",
+  "files": [
+   "inventory.geojson",
+   "inventory-metadata.json"
+  ],
+  "method": "State the CRS of each: GeoJSON coordinates are EPSG:4326 degrees, x/y attributes are EPSG:2056 metres; distances must use one projected CRS after transforming.",
+  "answer_shape": "No + CRS/units of each + transform first"
+ },
+ {
+  "question": "I want to keep first and last returns, but each source record only once. How many records survive? Why is simply adding the first-return and last-return totals wrong?",
+  "op": "table_query",
+  "files": [
+   "Survey.laz",
+   "ReadingGuide.md"
+  ],
+  "method": "Count point records where return_number = 1 OR return_number = number_of_returns (each record once); also count first returns and last returns separately to show that single returns (1 of 1) are in both, so adding them double-counts.",
+  "answer_shape": "union count + first count + last count + naive sum + double-counted single returns"
+ },
+ {
+  "question": "Our importer puts blank diameters and values at or below zero into the same bucket. How many of each are actually in the consolidated file? Please keep them separate.",
+  "op": "table_query",
+  "files": [
+   "current.csv"
+  ],
+  "method": "Over all rows, count DHP blank (empty after trim) and separately count non-blank DHP values <= 0; report total rows.",
+  "answer_shape": "blank count + <=0 count + total rows"
+ },
+ {
+  "question": "Across all classes, what share of the jointly valid Cape Town cells has a different label in the newer map?",
+  "op": "raster",
+  "files": [
+   "cape_town_2020.tif",
+   "cape_town_2021.tif"
+  ],
+  "method": "Select cells whose centres lie in the Cape Town boundary (municipalities.geojson) and are valid (non-nodata 0) in both editions; share = cells with a different class label / jointly valid cells (also by geodesic area).",
+  "answer_shape": "% changed + changed cells of jointly valid cells"
+ },
+ {
+  "question": "For a rough sketch, treat the crowns of park tree 00008100_00229d31 and street tree 00008100_0015058f as circles centred on their recorded points. Use the recorded crown diameters. Do those circles overlap, and what is the gap between their nearest edges?",
+  "op": "spatial",
+  "files": [
+   "anlagenbaeume.geojson",
+   "strassenbaeume.geojson"
+  ],
+  "method": "Get the two trees' points in the projected CRS and crown diameters; centre distance minus the sum of radii gives the edge gap (negative = overlap).",
+  "answer_shape": "overlap Yes/No + gap m + centre distance + radii"
+ },
+ {
+  "question": "The Outremont CSV will not decode cleanly as UTF-8, and the first DHP value looks like 11,00. How should I read that value without turning it into 1,100 or losing accents?",
+  "op": "text_answer",
+  "files": [
+   "outremont.csv",
+   "dictionary.pdf"
+  ],
+  "method": "Explain the file encoding (decode as cp1252/Latin-1, not UTF-8) and that the comma is a decimal separator, so the value is read as a decimal number; note whether a unit is stated.",
+  "answer_shape": "encoding + decimal-comma reading + value + unit caveat"
+ },
+ {
+  "question": "Read record Tree_code 607 for me: what are its Act_height, Height and Age values? Does Age=0 establish that the tree was newly planted this year?",
+  "op": "record_lookup",
+  "files": [
+   "DLR.json",
+   "DLR_metadata.json"
+  ],
+  "method": "Find the record with the given Tree_code and report Act_height, Height and Age; check the metadata for whether Age codes are documented.",
+  "answer_shape": "three field values + Age=0 does not establish new planting (undocumented)"
+ },
+ {
+  "question": "Compare the supplied crown footprints for SE-5521, WO-5718 and WD-6294. Which has the largest planar area, and what is it?",
+  "op": "area",
+  "files": [
+   "crown-drawing-view.geojson"
+  ],
+  "method": "Compute the planar area in EPSG:2056 of each named tree's crown polygon (unchanged geometry) and choose the largest.",
+  "answer_shape": "largest tree ID + area m2 (+ CRS)"
+ },
+ {
+  "question": "Before we quote an inventory total, how many DCC rows are there, how many distinct ID values, and how many ID values occur more than once? How many rows would an ID-only deduplication discard?",
+  "op": "table_query",
+  "files": [
+   "DCC.json"
+  ],
+  "method": "Count rows, distinct ID values, ID values occurring more than once; rows discarded by ID-only dedup = rows minus distinct IDs.",
+  "answer_shape": "row count + distinct IDs + repeated IDs + rows discarded"
+ },
+ {
+  "question": "I was going to count the green-filled buildings as green space. What does green actually mean in this key, and could that give us park or tree-cover totals?",
+  "op": "explain",
+  "files": [
+   "tombstone-1.jpg",
+   "Analysis.md"
+  ],
+  "method": "Read the map legend for what green fill denotes (a building class), and state whether it supports park or tree-cover totals.",
+  "answer_shape": "meaning of green + No, cannot give park/tree totals"
+ },
+ {
+  "question": "The two point files have quite different totals. What are they, and can I describe the difference as trees planted since the older dataset?",
+  "op": "table_query",
+  "files": [
+   "register.geojson",
+   "inventory.geojson"
+  ],
+  "method": "Count records in each point file; count inventory records by source/ID prefix to show the extra records come from another merged source, not new plantings.",
+  "answer_shape": "both counts + No + reason (source composition)"
+ },
+ {
+  "question": "geometrie_gdo is empty all the way down the register. Have we lost all the tree locations?",
+  "op": "explain",
+  "files": [
+   "register.geojson",
+   "register-metadata.json"
+  ],
+  "method": "Check that features have GeoJSON geometry even though the geometrie_gdo attribute is empty; the locations are in the geometry.",
+  "answer_shape": "No + where locations are stored"
+ },
+ {
+  "question": "Would it be fair to say the city gained that much actual tree cover in a year? The two map totals look quite convincing.",
+  "op": "raster",
+  "files": [
+   "cape_town_2020.tif",
+   "cape_town_2021.tif"
+  ],
+  "method": "Compute tree cover class area (geodesic) inside the boundary in each edition and the difference; check ProductNotes for an algorithm/version change between editions that makes label change not real cover change.",
+  "answer_shape": "No + area each year + change + algorithm caveat"
+ },
+ {
+  "question": "Suppose we review every register location within 75 m of WD-10651, including the anchor. How many records are in that circle under our stated metric?",
+  "op": "spatial",
+  "files": [
+   "register.geojson"
+  ],
+  "method": "Transform register points to EPSG:2056 and count records within the radius of the anchor record (boundary inclusive, anchor included).",
+  "answer_shape": "count within radius (CRS, inclusive)"
+ },
+ {
+  "question": "The German genus label is blank for tree 00008100_0022a4bf. Does the native record still identify its Latin genus, and what is it?",
+  "op": "record_lookup",
+  "files": [
+   "anlagenbaeume.geojson"
+  ],
+  "method": "Find the record by gisid and read the Latin genus field (gattung) and botanical species (art_bot) even if the German label is blank.",
+  "answer_shape": "Yes + Latin genus (+ species)"
+ },
+ {
+  "question": "For a simple area estimate, represent the crown of park tree 00008100_0014f10e as a circle with its recorded diameter. What is the disc area in square metres?",
+  "op": "record_lookup",
+  "files": [
+   "anlagenbaeume.geojson"
+  ],
+  "method": "Find the tree by gisid, read its crown diameter field (kronedurch, metres), and compute pi x (d/2)^2.",
+  "answer_shape": "diameter + disc area m2"
+ },
+ {
+  "question": "Can I add North quay and Inspection corridor to report the >=6 m area covered by either study? Give the naive sum, the correct union and the amount of double counting.",
+  "op": "raster",
+  "files": [
+   "surface.tif",
+   "terrain.tif"
+  ],
+  "method": "Compute pixels with DSM - DTM >= threshold inside each named study polygon (StudyAreas.geojson); naive sum = sum of both areas, union = area of qualifying pixels in either polygon, double counting = naive minus union.",
+  "answer_shape": "naive sum + union + double-counted area (m2)"
+ },
+ {
+  "question": "Those little circles in the position drawing look like trunks. What radius do they represent, and can I use that as a measured trunk radius?",
+  "op": "text_answer",
+  "files": [
+   "position-symbol-view.geojson",
+   "ReadingGuide.txt"
+  ],
+  "method": "Read the guide/layer for what the position circles represent (CAD symbol with fixed radius) and state it is not a measured trunk radius.",
+  "answer_shape": "radius + symbol meaning + No not measured"
+ },
+ {
+  "question": "The ID value 0.00E+00 keeps appearing. How many rows have that exact string? Should we turn it into the number zero and treat the rows as one confirmed tree?",
+  "op": "table_query",
+  "files": [
+   "DCC.json",
+   "Analysis.md"
+  ],
+  "method": "Count rows whose ID is exactly the string '0.00E+00' (string match, no numeric conversion); explain it is a placeholder, not one tree.",
+  "answer_shape": "row count + No + placeholder explanation"
+ },
+ {
+  "question": "Before we publish a Durban-wide number, what percentage of the supplied eThekwini boundary is actually covered by this northern tile? Use vector area for this coverage check.",
+  "op": "raster",
+  "files": [
+   "ethekwini_north_2021.tif",
+   "municipalities.geojson"
+  ],
+  "method": "Compute the geodesic area of the eThekwini boundary polygon and the area of its intersection with the raster tile's extent; coverage = intersection / boundary area.",
+  "answer_shape": "coverage % + boundary area + covered area (km2)"
+ },
+ {
+  "question": "For park trees 00008100_0029b9f2 and 00008100_0029b9f6, use circular crowns centred on the native points with the recorded diameters. How much ground is covered by at least one circle? Please avoid double-counting the shared area.",
+  "op": "spatial",
+  "files": [
+   "anlagenbaeume.geojson"
+  ],
+  "method": "Build circles from the two trees' points (projected CRS) with radius = crown diameter / 2 and compute the area of their union (sum minus intersection).",
+  "answer_shape": "union area m2"
+ },
+ {
+  "question": "These x and y values look nothing like longitude and latitude. What units are actually recorded here, including the elevations? Can I put the raw x/y values straight into a longitude/latitude map?",
+  "op": "text_answer",
+  "files": [
+   "Survey.laz",
+   "SurveyMetadata.xml"
+  ],
+  "method": "Read the horizontal and vertical CRS and units from the LAS header/metadata (projected state-plane coordinates in US survey feet, elevations in US survey feet on the stated vertical datum); explain that x/y must be reprojected before plotting as lon/lat.",
+  "answer_shape": "horizontal CRS + units + vertical datum/units + No, reproject first"
+ },
+ {
+  "question": "Our web map expects longitude and latitude. Which CRS do the native GeoJSON coordinates use, and what longitude and latitude should I plot for park tree 00008100_0014f10e? Give six decimals in longitude, latitude order.",
+  "op": "record_lookup",
+  "files": [
+   "anlagenbaeume.geojson",
+   "capabilities.xml"
+  ],
+  "method": "Find the tree by gisid, note the native CRS of its coordinates (projected, from the file/capabilities), transform the point to EPSG:4326 and give lon, lat to six decimals.",
+  "answer_shape": "native CRS + longitude, latitude"
+ },
+ {
+  "question": "How many square metres larger is WD-6294’s supplied crown footprint than SE-5521’s? Please calculate from the unrounded geometry areas.",
+  "op": "area",
+  "files": [
+   "crown-drawing-view.geojson"
+  ],
+  "method": "Compute both named crown polygons' planar areas in EPSG:2056 from unchanged geometry, subtract without intermediate rounding, then round.",
+  "answer_shape": "difference m2 (both areas)"
+ },
+ {
+  "question": "The history file has a lot more rows than I expected. How many measurements and distinct RAD_TYPE/RAD_EMP_NO pairs are there? Can I call the first number a tree count?",
+  "op": "table_query",
+  "files": [
+   "history.csv"
+  ],
+  "method": "Count data rows and count distinct (RAD_TYPE, RAD_EMP_NO) pairs kept as strings; rows are repeated measurements so not a tree count.",
+  "answer_shape": "row count + distinct pair count + No not a tree count"
+ },
+ {
+  "question": "Someone has put 83.8% and 33.6% side by side as two estimates of the same neighbourhood loss rate. Are they measuring the same thing?",
+  "op": "text_answer",
+  "files": [
+   "accra.html"
+  ],
+  "method": "Find each percentage in the paper and its numerator/denominator and population (subset with neighbourhood green space vs all household heads); show they measure different things.",
+  "answer_shape": "No + what each % measures with n/N"
+ },
+ {
+  "question": "How many inventory IDs come from each of its BK_ and TLM3D_ namespaces? Are they interchangeable labels for the same input source?",
+  "op": "table_query",
+  "files": [
+   "inventory.geojson"
+  ],
+  "method": "Count inventory records grouped by the prefix of baumnummer (BK_ vs TLM3D_); use metadata to say each prefix is a different input source.",
+  "answer_shape": "count per prefix + No, different sources"
+ },
+ {
+  "question": "How many inventory entries have no planting year? Would an unknown planting year mean that these are newly planted trees?",
+  "op": "count_blank",
+  "files": [
+   "inventory.geojson",
+   "inventory-metadata.json"
+  ],
+  "method": "Count records with null/blank pflanzjahr out of all records; break down by source prefix to show most blanks come from a source with no planting data.",
+  "answer_shape": "blank count (of total) + No + reason with breakdown"
+ },
+ {
+  "question": "Okay, just for the part of eThekwini we do have: what area is labelled Tree cover, and what percentage of the valid mapped area is that?",
+  "op": "raster",
+  "files": [
+   "ethekwini_north_2021.tif",
+   "municipalities.geojson"
+  ],
+  "method": "Select valid cells (non-nodata) whose centres lie in the eThekwini boundary; sum geodesic area of the Tree cover class and divide by the valid mapped area.",
+  "answer_shape": "tree cover area km2 + % of valid mapped area + valid area"
+ },
+ {
+  "question": "Check the returned points against the inclusive box 391000 ≤ easting ≤ 392000 and 5819500 ≤ northing ≤ 5820500. Which gisid is outside, which edge does it cross, and by how many metres?",
+  "op": "spatial",
+  "files": [
+   "anlagenbaeume.geojson",
+   "strassenbaeume.geojson"
+  ],
+  "method": "Check every returned point's native easting/northing against the inclusive box; for the point outside, report which edge it crosses and by how far (coordinate minus bound).",
+  "answer_shape": "gisid (layer) + edge crossed + distance m"
+ },
+ {
+  "question": "Which data licence does the publisher metadata attach to this tree-register service? Give its name and the licence link rather than assuming the licence of a map background or a software package.",
+  "op": "text_answer",
+  "files": [
+   "publisher_csw.xml"
+  ],
+  "method": "Read the licence / use constraints in the publisher CSW metadata record for the tree-register service; give the licence name and URL.",
+  "answer_shape": "licence name + licence link"
+ },
+ {
+  "question": "For our condition summary, give the number marked Poor and its percentage of all DCC rows. Then give the percentage using only rows with a recorded condition. Please make the two denominators clear.",
+  "op": "table_query",
+  "files": [
+   "DCC.json"
+  ],
+  "method": "Count rows whose Condition begins with 'Poor'; divide by all rows, and separately by rows with a non-null Condition; state both denominators.",
+  "answer_shape": "Poor count + % of all rows (N) + % of rows with condition (N)"
+ },
+ {
+  "question": "Is this register meant to cover every tree in Zürich, including all private gardens and woodland?",
+  "op": "text_answer",
+  "files": [
+   "register-metadata.json"
+  ],
+  "method": "Read the register metadata description of which trees are included (managed street trees and selected inventories) and state that it is not every tree.",
+  "answer_shape": "No + what the register covers"
+ },
+ {
+  "question": "Which fields would you use for a first join from diameter history to the consolidated inventory? Is joining on the Latin species name enough?",
+  "op": "text_answer",
+  "files": [
+   "dictionary.pdf",
+   "history.csv"
+  ],
+  "method": "Use the data dictionary to identify the tree key fields in each file (history RAD_TYPE + RAD_EMP_NO vs current INV_TYPE + EMP_NO), keep as strings; explain species name is not a unique key.",
+  "answer_shape": "join fields per file + No, Latin name not a key"
+ },
+ {
+  "question": "Can a trim-aware check find missing Site_name text in DLR even though SQL reports no nulls? Give both counts.",
+  "op": "count_blank",
+  "files": [
+   "DLR.json"
+  ],
+  "method": "Count Site_name values that are null (SQL-style) and separately those that are empty after trimming whitespace, out of all records.",
+  "answer_shape": "Yes + null count + trim-aware blank count of total"
+ },
+ {
+  "question": "The highest Z in the file is 848.75. What is that in metres, and may I describe it as the height of the tallest building above ground?",
+  "op": "text_answer",
+  "files": [
+   "SurveyMetadata.xml",
+   "LidarQualityReport.txt"
+  ],
+  "method": "Convert the Z value from US survey feet to metres (x 1200/3937); from metadata, Z is an elevation on the vertical datum for a point class, not a height above ground, so it cannot be called building height.",
+  "answer_shape": "value in m + No + what Z represents"
+ },
+ {
+  "question": "I read the missing-data discussion and worry that we are calling the radiation series complete. Using the approximate worst-case SID counts quoted there, what missing-data percentages do you get for SARAH-3 and SARAH-2? Would a clean ERA5LandPlus check justify saying that neither SARAH series contains gaps?",
+  "op": "text_answer",
+  "files": [
+   "PVGIS_Status_Report_2024.pdf"
+  ],
+  "method": "Find the missing-data discussion, take the approximate worst-case missing counts and total sizes for each SARAH series, compute percentages; explain that a clean ERA5LandPlus check does not show SARAH series are gap-free. Cite physical PDF page.",
+  "answer_shape": "% per series (count/total) + page + No + reason"
+ },
+ {
+  "question": "Using the complete closed LoD 2.2 solid for the focus property, including roof, wall and ground faces, what enclosed volume do the decoded coordinates give? Use one LoD 2.2 solid rather than the precomputed volume field.",
+  "op": "area",
+  "files": [
+   "3dbag_page_a.json",
+   "SourceGuide.md"
+  ],
+  "method": "Decode the focus building's CityJSON vertices (apply transform scale/translate), take ONE closed LoD 2.2 solid with all roof, wall and ground faces, and compute its enclosed volume (divergence/signed-tetrahedron sum); do not use the precomputed volume attribute.",
+  "answer_shape": "building ID + face counts + volume m3 (+ precomputed value not used)"
+ },
+ {
+  "question": "Which supplied building has the largest measurable footprint, and how large is it in square metres?",
+  "op": "area",
+  "files": [
+   "Buildings.geojson",
+   "BuildingDetails.json"
+  ],
+  "method": "Compute the planar area in EPSG:2154 of each building's (Multi)Polygon footprint, excluding holes; skip Point-only shapes; take the maximum.",
+  "answer_shape": "building ID + area m2 + count measured/excluded"
+ },
+ {
+  "question": "Add up the footprint areas we can actually measure from this extract. What is the total in hectares, keeping any holes excluded?",
+  "op": "area",
+  "files": [
+   "Buildings.geojson",
+   "BuildingDetails.json"
+  ],
+  "method": "Sum EPSG:2154 planar areas of all measurable (Multi)Polygon footprints (holes excluded, Point shapes skipped) and convert m2 to hectares (5 decimals).",
+  "answer_shape": "total m2 + total ha + number measured/excluded"
+ },
+ {
+  "question": "For a hypothetical drill, split the hose length in the fire-department note evenly among its independent hose carts. How much would each cart get, in feet and metres?",
+  "op": "text_answer",
+  "files": [
+   "tombstone-1.jpg",
+   "Analysis.md"
+  ],
+  "method": "Read the fire-department note on the map sheet for total hose length and number of hose carts; divide, then convert feet to metres (x 0.3048).",
+  "answer_shape": "note values + per-cart feet + per-cart metres"
+ },
+ {
+  "question": "What is the mean of the reported MT_162 power values for 16 January 2012? My colleague divided the daily kWh total by 96.",
+  "op": "table_query",
+  "files": [
+   "EightClients_CompletePeriod.csv",
+   "PublisherMetadata.json"
+  ],
+  "method": "Parse semicolon-delimited, decimal-comma values; filter the client column to the 96 timestamps labelled with the date (00:00-23:45) and take the mean (kW); per metadata, energy per 15-min = kW/4, so daily kWh = sum/4 and kWh/96 is per-interval energy, not mean power.",
+  "answer_shape": "mean power kW (n intervals) + daily energy kWh + why colleague's figure differs"
+ },
+ {
+  "question": "For an illustrative PV screen on CG81TDJ17AXG, treat 60% of its projected footprint as usable, install 0.20 kWp per usable square metre and assume 900 kWh per kWp each year. What capacity and annual generation does that rule give?",
+  "op": "area",
+  "files": [
+   "Buildings.geojson",
+   "BuildingDetails.json"
+  ],
+  "method": "Compute the named building's footprint area in EPSG:2154, then apply the stated usable fraction, kWp per m2 and kWh per kWp in sequence, rounding only at the end.",
+  "answer_shape": "footprint m2 + usable m2 + capacity kWp + annual kWh"
+ },
+ {
+  "question": "For North quay, what is the mean raw height difference and the mean after our admissibility filter? Calculate their difference before rounding, and report all three computational statistics to four decimals.",
+  "op": "raster",
+  "files": [
+   "surface.tif",
+   "terrain.tif"
+  ],
+  "method": "For pixels inside the named study polygon, compute mean DSM - DTM over all pixels and over pixels passing the Analysis admissibility filter; take their difference before rounding, report to four decimals.",
+  "answer_shape": "raw mean + filtered mean + difference (pixel counts)"
+ },
+ {
+  "question": "For CG81TDJ17AXG, how many address links come from BAN and how many from bdnb? Also count the links with no ban_id.",
+  "op": "table_query",
+  "files": [
+   "BuildingDetails.json"
+  ],
+  "method": "Find the building by rnb_id, count its addresses entries grouped by source (BAN vs bdnb), and count entries whose ban_id is null.",
+  "answer_shape": "total links + BAN count + bdnb count + no-ban_id count"
+ },
+ {
+  "question": "When was the largest recorded maximum kVA, and how large was it? Keep the power unit distinct from energy sold.",
+  "op": "table_query",
+  "files": [
+   "electricity-use-ethekwini.xlsx"
+  ],
+  "method": "Take the max of the 'Maximum kVA' column over all Year rows and report the Year label of that row; state the unit as kVA (power), distinct from 'Energy (kWh) sold'.",
+  "answer_shape": "period label + max kVA value + unit note (power, not energy)"
+ },
+ {
+  "question": "The monthly average is 11.4 TB but the annual figure is 137 TB. Is that necessarily a contradiction? Show the arithmetic, and say whether the graph is a sound basis for claiming that monthly demand grew over time.",
+  "op": "text_answer",
+  "files": [
+   "PVGIS_Status_Report_2024.pdf"
+  ],
+  "method": "Find the monthly-average and annual traffic statements and the graph caveat in the report; multiply the monthly average by 12 to compare with the annual figure, then say whether the measurement method changed over the graph's period (which makes a trend claim unsound).",
+  "answer_shape": "Not a contradiction / contradiction + arithmetic (monthly x 12 vs annual) + whether graph supports a trend, with reason"
+ },
+ {
+  "question": "Before treating the CSV as an exact replacement for the workbook, join them by all eight features. How many feature tuples match, and how many Y1 and Y2 cells differ by more than 1e−10?",
+  "op": "compare_keys",
+  "files": [
+   "ENB2012_data.xlsx",
+   "data.csv"
+  ],
+  "method": "Use the eight feature columns X1-X8 as a composite key to join workbook rows to CSV rows; count matched tuples (1:1), then for matched pairs count rows where |Y1 difference| or |Y2 difference| exceeds 1e-10.",
+  "answer_shape": "matched tuple count + count of differing Y1 cells (with example values) + count of differing Y2 cells"
+ },
+ {
+  "question": "For a municipal roof, can I assume the default horizon calculation already accounts for the buildings next door? What does this report say I still need to supply?",
+  "op": "text_answer",
+  "files": [
+   "PVGIS_Status_Report_2024.pdf"
+  ],
+  "method": "Look up the report's description of the default horizon calculation (what elevation data it uses) and what the user must supply for nearby obstructions such as buildings.",
+  "answer_shape": "Yes/No + what default horizon uses + what the user must supply"
+ },
+ {
+  "question": "Can we identify the owner of S9A8TZSDNXME from the parcel links in this package?",
+  "op": "record_lookup",
+  "files": [
+   "BuildingDetails.json",
+   "SourceGuide.txt"
+  ],
+  "method": "Find the record for the given RNB ID and count its parcel/plot links; check the source guide for what those links represent (geometric cadastral intersections, not ownership).",
+  "answer_shape": "No + number of parcel links + what the links mean"
+ },
+ {
+  "question": "For a hypothetical peak-power estimate in 2018/2019, use P(kW)=S(kVA)×the recorded power factor. What does that formula give?",
+  "op": "value",
+  "files": [
+   "electricity-use-ethekwini.xlsx"
+  ],
+  "method": "Read 'Maximum kVA' and 'Power factor at system peak (%)' (stored as a fraction) for the named Year row and multiply them; label the result kW and hypothetical.",
+  "answer_shape": "formula with both inputs + resulting kW + hypothetical label"
+ },
+ {
+  "question": "The 2011 column looks much lower. How many months are populated, which months are blank, and can we report its sum as a full-year reduction against 2010?",
+  "op": "count_blank",
+  "files": [
+   "historic-monthly.csv"
+  ],
+  "method": "In the named year column, exclude the Totals row and count populated vs blank month rows, list the blank months and sum the populated ones; conclude whether a partial-year sum can be compared with a full prior year.",
+  "answer_shape": "populated month count + blank months listed + partial sum + No (not a full-year comparison)"
+ },
+ {
+  "question": "How much did energy sold grow in 2018/2019 relative to 2017/2018? Report an ordinary percentage rather than the spreadsheet’s stored fraction.",
+  "op": "change",
+  "files": [
+   "electricity-use-ethekwini.xlsx"
+  ],
+  "method": "Compute the percentage change in 'Energy (kWh) sold' from the earlier Year row to the later one (or read 'Percent energy growth (%)', stored as a fraction) and express it as an ordinary percentage.",
+  "answer_shape": "percent change + the stored fraction it corresponds to"
+ },
+ {
+  "question": "For the North quay study, how much of our selected raster support has a raw height difference of at least 6 m, in square metres and as a percentage?",
+  "op": "raster",
+  "files": [
+   "surface.tif",
+   "terrain.tif"
+  ],
+  "method": "Compute raw difference surface.tif minus terrain.tif, select valid pixels inside the named study polygon from StudyAreas.geojson (respecting holes), count pixels >= 6 m and multiply by pixel area; report the share of selected support.",
+  "answer_shape": "pixel count of qualifying / support pixels + area m2 + percent of support"
+ },
+ {
+  "question": "Compare 2007/2008 with 2018/2019. What percentage change is there in customer accounts, and what percentage change in energy sold, using 2007/2008 as the base for each?",
+  "op": "change",
+  "files": [
+   "electricity-use-ethekwini.xlsx"
+  ],
+  "method": "For 'Number of customers' and 'Energy (kWh) sold', compute percentage change from the base Year row to the later Year row, each using the base year as denominator.",
+  "answer_shape": "each item: base -> later values + percent change (sign shown)"
+ },
+ {
+  "question": "Using the full one-square-kilometre tile, what point-record density do we actually get? Does that alone prove the publisher’s nominal 16 ppm specification is wrong?",
+  "op": "table_query",
+  "files": [
+   "survey.laz",
+   "Analysis.md"
+  ],
+  "method": "Count all point records in the LAS file and divide by the tile area (1 km2 = 1,000,000 m2) to get records per m2; explain that record density includes overlaps/multiple returns and so does not disprove a nominal pulse specification.",
+  "answer_shape": "record count + records per m2 + No (does not prove spec wrong) with reason"
+ },
+ {
+  "question": "A colleague copied 20 from the requirements sheet as the area of corridor 119. Is that the corridor’s recorded area? Explain which source should answer this inventory question.",
+  "op": "record_lookup",
+  "files": [
+   "1807_EP_AR_v18.ifc",
+   "Lisa-1-UBN-hoonete-andmesisu-nouded.xlsx"
+  ],
+  "method": "Find IfcSpace with name '119' and read its recorded area property (AR_Ruum.120_Pindala); locate where the quoted number sits in the requirements workbook (example cell) and state that the IFC model, not the requirements sheet, answers inventory questions.",
+  "answer_shape": "No + where the copied number comes from + recorded IFC area for the space"
+ },
+ {
+  "question": "How many different buildings did we actually download across these two pages? The object and page counters don’t seem to agree.",
+  "op": "compare_keys",
+  "files": [
+   "3dbag_page_a.json",
+   "3dbag_page_b.json"
+  ],
+  "method": "Collect building (Pand) identifiers from the feature arrays of both pages, find IDs present in both pages, and count distinct IDs vs total feature records; compare with each page's numberReturned counters.",
+  "answer_shape": "distinct building count + total feature records + duplicated ID + counter vs array mismatch"
+ },
+ {
+  "question": "For Tombstone Gas Works, Pioneer Livery and City Hall, which sheet does the index send us to? Which of those sites can we inspect on the two supplied detail sheets?",
+  "op": "text_answer",
+  "files": [
+   "Analysis.md",
+   "tombstone-1.jpg"
+  ],
+  "method": "Read the index sheet's listing for each named site to get its sheet number, then state which of those sheets are among the supplied detail sheets.",
+  "answer_shape": "site -> sheet number for each + which are inspectable"
+ },
+ {
+  "question": "I am putting S9A8TZSDNXME on a web map. What are its marker longitude and latitude in the supplied WGS84 record, and which field should I use for the building outline?",
+  "op": "record_lookup",
+  "files": [
+   "Records.json"
+  ],
+  "method": "Find the record by its RNB ID and report the WGS84 point coordinates (longitude, latitude order) and name the field holding the building outline geometry (shape).",
+  "answer_shape": "longitude + latitude + outline field name"
+ },
+ {
+  "question": "Could I get the exact median for detached houses and purpose-built flats together by weighting the two published medians by their dwelling counts? Or do we need something more?",
+  "op": "explain",
+  "files": [
+   "Consumption_headline_EW_2024.xlsx",
+   "SourceGuide.txt"
+  ],
+  "method": "Explain that a median of a combined group cannot be derived exactly by weighting group medians; it needs the combined distribution or record-level data.",
+  "answer_shape": "No + why + what data would be needed"
+ },
+ {
+  "question": "The dataset page mentions more than a million records. How many data rows are actually in this supplied version 3 CSV? Should I describe that as the number of real homes surveyed?",
+  "op": "table_query",
+  "files": [
+   "urban_building_stock_datasets_21022024.csv",
+   "SourceNote.txt"
+  ],
+  "method": "Count data rows in the CSV excluding the header; check the source note / readme for whether rows are simulated configurations rather than surveyed homes.",
+  "answer_shape": "row count + No (simulated, not real homes)"
+ },
+ {
+  "question": "The dashboard says zero peak growth for 1997/1998. Was maximum kVA exactly unchanged? Give both consecutive peak values and the change in kVA.",
+  "op": "change",
+  "files": [
+   "electricity-use-ethekwini.xlsx"
+  ],
+  "method": "Read 'Maximum kVA' for the two consecutive Year rows and compute the difference in kVA; note the stored 'Percent growth' rounds to zero even though the value changed.",
+  "answer_shape": "both kVA values + difference in kVA + not unchanged"
+ },
+ {
+  "question": "Someone filled the hole before processing Eastern blocks. What is the geometric area of that excluded hole, and how much would filling it overstate the >=6 m raster result? Those need not be the same number.",
+  "op": "raster",
+  "files": [
+   "StudyAreas.geojson",
+   "surface.tif"
+  ],
+  "method": "Compute the geometric area of the named study polygon's interior ring (hole) in the projected CRS; then count raw DSM-DTM >= 6 m pixels with and without the hole filled and multiply the extra pixels by pixel area.",
+  "answer_shape": "hole area m2 + extra qualifying pixels + overstatement m2 (with both totals)"
+ },
+ {
+  "question": "The first period already has a growth figure. What percentage is published for maximum kVA in 1978/1979, and can we independently reconstruct it from a preceding peak record in this workbook?",
+  "op": "value",
+  "files": [
+   "electricity-use-ethekwini.xlsx"
+  ],
+  "method": "Read 'Percent growth' for Maximum kVA in the first Year row (stored as a fraction, convert to %); check whether any earlier Year row exists from which it could be recomputed.",
+  "answer_shape": "published growth % (and stored fraction) + No, cannot reconstruct (no earlier row)"
+ },
+ {
+  "question": "Do the horizontal body footprints of rooms 3-1 and 3-3 touch? Give their shortest planar separation in metres. Does that geometric distance establish a usable walking route?",
+  "op": "spatial",
+  "files": [
+   "1807_EP_AR_v18.ifc"
+  ],
+  "method": "Project the body geometry of the two named IfcSpace rooms to horizontal footprints in their placement coordinates and compute the shortest planar distance between them (0 means touching); note that a geometric gap says nothing about walkable doors/routes.",
+  "answer_shape": "touch Yes/No + shortest separation in m + No (does not establish a walking route)"
+ },
+ {
+  "question": "Can I cite the PVGIS 6 section as proof that the new public service had already launched? I see a date and a working API, but I am not sure they mean the same thing.",
+  "op": "text_answer",
+  "files": [
+   "PVGIS_Status_Report_2024.pdf"
+  ],
+  "method": "Read the PVGIS 6 section: distinguish what the date refers to (approval vs launch), the targeted release timing, and where the API runs (development server).",
+  "answer_shape": "No + what the date means + planned release timing + API status"
+ },
+ {
+  "question": "Can we use the two supplied GeoJSON files to locate the buildings on a map? Check how many features and usable geometries each actually contains before saying yes.",
+  "op": "count_blank",
+  "files": [
+   "certificates-2022.geojson",
+   "certificates-2025.geojson"
+  ],
+  "method": "For each GeoJSON file count features and count those whose geometry is null/empty; a file is usable for mapping only if it has non-null geometries.",
+  "answer_shape": "No/Yes + per file: feature count and usable geometry count"
+ },
+ {
+  "question": "Before we import this building, which IFC schema and project length and area units does it declare? Should all area values be converted from square millimetres just because coordinates use millimetres?",
+  "op": "text_answer",
+  "files": [
+   "1807_EP_AR_v18.ifc",
+   "readme.md"
+  ],
+  "method": "Read FILE_SCHEMA from the IFC header and the IfcSIUnit entries for LENGTHUNIT and AREAUNIT (with prefix); explain that area units are declared separately from length units so areas are not converted from mm2.",
+  "answer_shape": "schema name + length unit + area unit + No (do not convert areas) with reason"
+ },
+ {
+  "question": "I need to match CG81TDJ17AXG to the supplied BD Topo reference. What external ID and source version are recorded?",
+  "op": "record_lookup",
+  "files": [
+   "Records.json"
+  ],
+  "method": "Find the record by its RNB ID and read its ext_ids entry for the BD Topo source: report the external id and source_version.",
+  "answer_shape": "external ID + source version"
+ },
+ {
+  "question": "For 2014/2015 through 2018/2019 combined, what loss percentage follows from total purchases minus total sales, divided by total purchases? How does it compare with a simple average of the five reported loss percentages?",
+  "op": "table_query",
+  "files": [
+   "electricity-use-ethekwini.xlsx"
+  ],
+  "method": "Filter Year rows for the stated span; sum 'Energy (kWh) purchased' and 'Energy (kWh) sold', compute (purchased - sold)/purchased as a %, and separately average the 'Percent loss (%)' values (stored as fractions); give the difference in percentage points.",
+  "answer_shape": "pooled loss % + simple mean loss % + difference in pp"
+ },
+ {
+  "question": "The catalogue says there are no missing values. Are there any missing cells in the actual A2:J769 data table, and should the blank rows below it or columns K:L be counted as missing observations?",
+  "op": "count_blank",
+  "files": [
+   "ENB2012_data.xlsx",
+   "Metadata.json"
+  ],
+  "method": "Count empty cells within the data range A2:J769 only (10 columns x 768 rows); treat blank rows below and empty columns K:L as sheet formatting extent, not missing observations.",
+  "answer_shape": "No missing cells (count) + statement that blank rows/extra columns are not missing data"
+ },
+ {
+  "question": "From 2014/2015 to 2015/2016, did sales and purchases move in the same direction? Give each percentage change and the change in the reported loss share in percentage points.",
+  "op": "change",
+  "files": [
+   "electricity-use-ethekwini.xlsx"
+  ],
+  "method": "Compute percentage change from the earlier to the later Year row for 'Energy (kWh) sold' and 'Energy (kWh) purchased', and the change in 'Percent loss (%)' in percentage points (convert stored fractions); say whether directions match.",
+  "answer_shape": "Same/opposite direction + each % change + loss share before -> after and pp change"
+ },
+ {
+  "question": "On the aligned maps, how many Cape Town cells move from Tree cover to Built-up, and what area is that? Please keep the claim at map-label level.",
+  "op": "raster",
+  "files": [
+   "cape_town_2020.tif",
+   "cape_town_2021.tif"
+  ],
+  "method": "On aligned grids inside the Cape Town boundary (municipalities.geojson), count cells with Tree cover (class 10) in the older edition and Built-up (class 50) in the newer one; convert to area using cell area and describe it as a map-label transition between editions, not proven land conversion.",
+  "answer_shape": "cell count + area km2 + caveat (map-label transition, editions differ)"
+ },
+ {
+  "question": "What is mean Y1 for X5 = 3.5 versus X5 = 7? Give the sample count behind each mean so the dashboard does not hide the weighting.",
+  "op": "table_query",
+  "files": [
+   "data.csv"
+  ],
+  "method": "Group rows by X5 and compute mean Y1 and row count for each of the two named X5 values.",
+  "answer_shape": "for each group: mean Y1 + n"
+ },
+ {
+  "question": "A chart draft labels Y1 and Y2 as annual kWh per square metre. Do the supplied catalogue variable definitions actually establish that unit?",
+  "op": "explain",
+  "files": [
+   "Metadata.json",
+   "SourceGuide.txt"
+  ],
+  "method": "Check the units given for Y1 and Y2 in the variable metadata and what the source guide says about adding physical units; answer whether the stated unit is established.",
+  "answer_shape": "No/Yes + what the metadata gives for units + guide's rule"
+ },
+ {
+  "question": "Are 281 and 281 BIS Rue du Faubourg des Postes linked to the same RNB building? Give me the building and the two address IDs.",
+  "op": "record_lookup",
+  "files": [
+   "Records.json"
+  ],
+  "method": "Find the address link records for the two named street numbers and report the RNB building ID each is linked to and each address ID; say whether the building is the same.",
+  "answer_shape": "Yes/No + building ID + the two address IDs"
+ },
+ {
+  "question": "I have two different 2024 traffic totals in my notes. Can you check the Internet Access section against the conclusions, give both pairs of figures, and tell me whether this PDF settles which pair is correct?",
+  "op": "text_answer",
+  "files": [
+   "PVGIS_Status_Report_2024.pdf"
+  ],
+  "method": "Find the traffic figures (hits and visitors) in the Internet Access section and in the Conclusions; report both pairs and state that the document itself does not resolve which is correct.",
+  "answer_shape": "both pairs of figures with section names + not settled by the PDF"
+ },
+ {
+  "question": "Which nonblank postal codes appear in the supplied address links, and what commune INSEE code is recorded for those addresses?",
+  "op": "table_query",
+  "files": [
+   "Records.json"
+  ],
+  "method": "Flatten the address links of all records and list distinct non-blank postal code values (count blanks separately), then list distinct commune INSEE codes across all address links.",
+  "answer_shape": "list of postal codes + blank count + INSEE code(s) and number of links"
+ },
+ {
+  "question": "According to the publisher, how is the repeated autumn hour represented? Could I recover two separate observed hour profiles by duplicating the supplied rows?",
+  "op": "text_answer",
+  "files": [
+   "PublisherMetadata.json"
+  ],
+  "method": "Read the publisher's note on daylight-saving time changes: how the repeated October hour is stored; explain that aggregated values cannot be split into two observed hours by duplication.",
+  "answer_shape": "publisher's representation + No (cannot recover two profiles)"
+ },
+ {
+  "question": "I joined these files on ID and now Civic Offices seems to have become a fire station. What IDs does Civic Offices have in the three snapshots, and what is wrong with that join?",
+  "op": "table_query",
+  "files": [
+   "certificates-2022.csv",
+   "certificates-2023.csv"
+  ],
+  "method": "In each snapshot filter rows with Building name exactly equal to the named building and list its ID; show that IDs differ across snapshots, so ID is not a stable join key (join on exact building name instead). Include certificates-2025.csv too.",
+  "answer_shape": "ID per snapshot + why ID join fails + suggested key"
+ },
+ {
+  "question": "Could you back out rough daily repair costs before and after the monitoring intervention? For this calculation, take the reported $2-a-day reduction and 46% literally. Also, was that 46% a reduction in fatal crashes or in something else?",
+  "op": "text_answer",
+  "files": [
+   "Kenya_Road_Safety_Report_Excerpt.pdf",
+   "PageMap.json"
+  ],
+  "method": "Find the monitoring RCT statement giving the dollar-a-day reduction and the % reduction; back out before = reduction / percent and after = before - reduction; state what the percentage measured (repair costs, not crashes) with page citation.",
+  "answer_shape": "before $/day + after $/day + what the % refers to + page"
+ },
+ {
+  "question": "There’s an N30A reaching Terminal One at 08:54 and an N50 leaving at 09:00. Can I use that connection for this journey?",
+  "op": "transit",
+  "files": [
+   "seremban_a.zip",
+   "seremban_b.zip"
+  ],
+  "method": "Find the arriving trip of the first route and the departing trip of the second at the named stop in stop_times, compute the connection gap in minutes and compare with the minimum transfer time stated in SourceGuide.md.",
+  "answer_shape": "Yes/No + trip IDs with arrival/departure times + gap minutes vs minimum"
+ },
+ {
+  "question": "For the selected replacement trip, is a bicycle allowed? What does the vehicle’s wheelchair flag say?",
+  "op": "transit",
+  "files": [
+   "trips.txt",
+   "ReadingGuide.txt"
+  ],
+  "method": "Identify the selected replacement trip as defined in the reading guide, then read its bikes_allowed and wheelchair_accessible codes in trips.txt and decode them per the GTFS meanings (1 = yes, 2 = no).",
+  "answer_shape": "bicycles allowed Yes/No (code) + wheelchair flag code and meaning"
+ },
+ {
+  "question": "What percentage of Southern jetty’s selected support is >=6 m in the raw difference grid? Could we label that result “tree-canopy cover”?",
+  "op": "raster",
+  "files": [
+   "surface.tif",
+   "terrain.tif"
+  ],
+  "method": "Inside the named study polygon (StudyAreas.geojson), select valid pixels of surface.tif minus terrain.tif, count those >= 6 m and divide by selected valid pixels for the %; state that raw height difference is not a vegetation/canopy classification.",
+  "answer_shape": "% (qualifying of selected pixels, with counts) + No (cannot be labelled tree-canopy cover)"
+ },
+ {
+  "question": "Flagstaff’s Williams St entrance is on level index 0 and platform 1 on index −3. What is the absolute difference between those indices, and can we call it a three-metre drop?",
+  "op": "transit",
+  "files": [
+   "stops.txt",
+   "levels.txt"
+  ],
+  "method": "Look up the level_id of the named entrance and platform stops in stops.txt, read their level_index in levels.txt and take the absolute difference; per ReadingGuide.txt level indices only order levels and are not heights.",
+  "answer_shape": "absolute index difference (index units) + No (not metres) with reason"
+ },
+ {
+  "question": "For a hypothetical planning exercise, imagine the same city and period had 1,000 road deaths and 2,000 injuries. If the report’s shares for its 200 high-risk Nairobi locations applied, how many of each would fall at those sites? Label these as scenario estimates.",
+  "op": "text_answer",
+  "files": [
+   "Kenya_Road_Safety_Report_Excerpt.pdf",
+   "PageMap.json"
+  ],
+  "method": "Find the report's percentages of deaths and of injuries occurring at the high-risk locations; multiply the hypothetical totals by those shares and label results as scenario estimates.",
+  "answer_shape": "scenario deaths + scenario injuries (with shares used) + scenario label"
+ },
+ {
+  "question": "Which Latin genus is most common in the supplied records? Give its count and share of all returned trees, combining both layers.",
+  "op": "table_query",
+  "files": [
+   "anlagenbaeume.geojson",
+   "strassenbaeume.geojson"
+  ],
+  "method": "Combine records of both layers, group by the Latin genus (first word of the botanical name field), take the top genus, and divide its count by total records of both layers.",
+  "answer_shape": "genus name + count + total records (per-layer split) + share %"
+ },
+ {
+  "question": "There are no blank DHP values in Outremont. Can I write that every row therefore has a positive diameter measurement?",
+  "op": "table_query",
+  "files": [
+   "outremont.csv"
+  ],
+  "method": "Count rows where DHP is blank and rows where DHP equals 0 (non-positive) out of all Outremont rows; non-blank does not mean positive.",
+  "answer_shape": "No + number of zero-DHP rows + total rows"
+ },
+ {
+  "question": "Which DCC street label has the most records after our case-and-space normalisation? Give its total and explain why searching only GRIFFITH AVENUE gives a slightly smaller number.",
+  "op": "table_query",
+  "files": [
+   "DCC.json",
+   "Analysis.md"
+  ],
+  "method": "Normalise Street (upper-case, trim, collapse spaces), group and count records, take the top label; then count exact-match records for the raw label and explain the difference by case/spacing variants.",
+  "answer_shape": "top label + normalised count + exact-match count + reason for difference"
+ },
+ {
+  "question": "For a hypothetical follow-up survey, consider streets with at least ten returned street-tree records and a Tilia share no higher than 50%. Which eligible street has the highest Tilia share? Include ties, and give each winning numerator, denominator and percentage.",
+  "op": "table_query",
+  "files": [
+   "strassenbaeume.geojson"
+  ],
+  "method": "Group street-tree records by street; keep streets with >= 10 records; compute Tilia share per street; keep those with share <= 50%; report the street(s) with the highest share including ties.",
+  "answer_shape": "street name(s) + Tilia count / total records + % + tie statement"
+ },
+ {
+  "question": "Lots of inventory rows have an empty uuid_tlm3d. Are those invalid trees that we should remove from the inventory?",
+  "op": "count_blank",
+  "files": [
+   "inventory.geojson",
+   "ReadingGuide.txt"
+  ],
+  "method": "Count records with empty uuid_tlm3d, then cross-tabulate against the record source/ID prefix (TLM3D_ vs Baumkataster) to show that empties are the non-TLM3D records, which the field is not meant to link.",
+  "answer_shape": "No + empty count + how blanks align with record source + why empty is expected"
+ },
+ {
+  "question": "For a rough density note, divide all point records by the rectangle between the file's recorded x/y extrema. What is the rectangle area in square metres and the mean record density per square metre? Please do not present this as a uniform pulse density across the whole area.",
+  "op": "table_query",
+  "files": [
+   "Survey.laz",
+   "SurveyMetadata.xml"
+  ],
+  "method": "From the LAS header/records take min and max x and y and the point record count; compute rectangle area in the file's CRS units (US survey feet), convert to m2, and divide the record count by it; caveat that it is a mean record density, not uniform pulse density.",
+  "answer_shape": "x/y ranges + area ftUS2 and m2 + record count + records per m2 + caveat"
+ },
+ {
+  "question": "For Foxrock-Carrickmines, compare the raw Act_height mean with the mean after keeping strictly positive values. Give both means and the number removed. Does that identify the removed values as bad measurements?",
+  "op": "table_query",
+  "files": [
+   "DLR.json"
+  ],
+  "method": "Filter records to the named Area; compute mean Act_height of all records, then mean of records with Act_height > 0, and the number removed; say that zero values are not thereby proved to be bad measurements.",
+  "answer_shape": "record count + raw mean + positive-only mean (n) + removed count + No"
+ },
+ {
+  "question": "Our supplied 3D file seems to contain only Stamm. How many of its features have that value, and does this show that the full service has no crown models?",
+  "op": "table_query",
+  "files": [
+   "tree-parts-view.geojson",
+   "tree-parts-count.xml"
+  ],
+  "method": "Count features in the 3D tree-parts view grouped by baumteil; compare with the total hit count in tree-parts-count.xml and metadata describing parts (Stamm and Krone) to show the file is a bounded subset.",
+  "answer_shape": "feature count + baumteil values + No (subset of larger service; crowns exist) with numbers"
+ },
+ {
+  "question": "Does our mapped part of eThekwini contain any Mangroves-class cells, or can I put zero in that column? Give the area to two decimal places—it may be small.",
+  "op": "raster",
+  "files": [
+   "ethekwini_north_2021.tif",
+   "municipalities.geojson"
+  ],
+  "method": "Count cells of the Mangroves class (code 95) inside the eThekwini boundary within the tile and convert to area using geodesic cell area (WGS84 degrees), rounding to two decimals.",
+  "answer_shape": "Yes/No (not zero) + cell count + area km2 (2 dp)"
+ },
+ {
+  "question": "Is Tilia equally common in the park and street layers? Give its percentage within each layer using that layer’s own number of records.",
+  "op": "table_query",
+  "files": [
+   "anlagenbaeume.geojson",
+   "strassenbaeume.geojson"
+  ],
+  "method": "For each layer separately, count Tilia records and divide by that layer's own total record count.",
+  "answer_shape": "Yes/No + per layer: Tilia count / layer total = %"
+ },
+ {
+  "question": "Table 2 labels the sample as 1,914, but the male and female rows do not add up to that. How many gender responses are unaccounted for, and what denominator is consistent with the printed 50.4% male?",
+  "op": "value",
+  "files": [
+   "accra.html",
+   "accra.pdf"
+  ],
+  "method": "Read the Male and Female counts and the stated sample size in Table 2; subtract their sum from the sample to get unaccounted responses and check which denominator reproduces the printed male %.",
+  "answer_shape": "male + female sum + missing responses + consistent denominator with check %"
+ },
+ {
+  "question": "Among register entries whose strasse is exactly Uni Irchel, Winterthurerstr. 190, which native genus is most common, and how many entries have it?",
+  "op": "table_query",
+  "files": [
+   "register.geojson"
+  ],
+  "method": "Filter register entries whose strasse equals the given string exactly, group by the register's own (native) genus field and take the most common one with its count.",
+  "answer_shape": "genus + count + filtered total"
+ },
+ {
+  "question": "For a hypothetical resurfacing budget, charge €12 per m² of corridor 119’s modelled horizontal footprint. What is the estimated charge, and is an €800 budget sufficient under that rule?",
+  "op": "area",
+  "files": [
+   "1807_EP_AR_v18.ifc"
+  ],
+  "method": "Compute the horizontal footprint area of the named IfcSpace from its body geometry profile (in m2 per the declared units), multiply by the hypothetical rate, and compare with the budget.",
+  "answer_shape": "footprint m2 + charge + Yes/No sufficient (with margin)"
+ },
+ {
+  "question": "How much raw-height-difference area at or above 6 m is inside the Eastern blocks study, with its excluded hole respected?",
+  "op": "raster",
+  "files": [
+   "StudyAreas.geojson",
+   "surface.tif"
+  ],
+  "method": "Select pixels whose centres lie inside the named study polygon excluding its hole, compute surface.tif minus terrain.tif, count pixels >= 6 m and multiply by pixel area.",
+  "answer_shape": "area m2 (pixel count x pixel area) + rule used"
+ },
+ {
+  "question": "If I independently flatten both addresses and ext_ids for X1MQXNXA5C4P and join those lists on its RNB ID, how many output rows do I get? How many buildings do those rows represent?",
+  "op": "record_lookup",
+  "files": [
+   "BuildingDetails.json"
+  ],
+  "method": "Find the record by RNB ID, count its addresses and its ext_ids; a join of two independently flattened lists on the same ID gives their product of rows, all for one building.",
+  "answer_shape": "row count (addresses x ext_ids) + number of buildings"
+ },
+ {
+  "question": "Under the consumption test quoted in the frozen FBE catalogue description alone, how would 149 kWh and exactly 150 kWh in a month be treated? This is a historical rule example, not a current entitlement decision.",
+  "op": "text_answer",
+  "files": [
+   "CatalogueRecord.json"
+  ],
+  "method": "Quote the eligibility rule in the catalogue description and apply it literally (strictly less than the threshold) to each test value; label as a historical rule example.",
+  "answer_shape": "quoted rule + each value pass/fail with reason"
+ },
+ {
+  "question": "Across the downloaded buildings, what roof area passes our orientation-and-tilt screen, and what hypothetical peak panel capacity does that leave us?",
+  "op": "table_query",
+  "files": [
+   "3dbag_page_a.json",
+   "3dbag_page_b.json"
+  ],
+  "method": "Deduplicate buildings across both pages by ID, select LoD2.2 roof surfaces that pass the orientation-and-tilt screen in SourceGuide.md, sum their areas, then apply the guide's usable fraction and panel efficiency to get kWp.",
+  "answer_shape": "distinct buildings + screened roof area m2 + hypothetical kWp with factors"
+ },
+ {
+  "question": "The catalogue description says monthly readings are available from November 2009. Does this particular CSV nevertheless contain a full 2008 column? Give the populated-month count and its total without guessing why the dates differ.",
+  "op": "table_query",
+  "files": [
+   "historic-monthly.csv"
+  ],
+  "method": "In the named year column, exclude the Totals row, count populated month rows and sum them, and compare with the Totals row; report without speculating about why catalogue dates differ.",
+  "answer_shape": "Yes/No + populated month count + total + match with Totals row"
+ },
+ {
+  "question": "Can we turn that panel screen into an annual electricity-generation figure for the client from this packet alone?",
+  "op": "explain",
+  "files": [
+   "SourceGuide.md",
+   "3dbag_page_a.json"
+  ],
+  "method": "Check whether the packet contains irradiance, yield or performance-ratio data; if not, state that only roof area and nameplate capacity are supported and annual kWh needs external assumptions.",
+  "answer_shape": "No + what the packet does support + what is missing"
+ },
+ {
+  "question": "Before I reuse the old table, please check its 2010 total by adding the months. What is the recomputed total, and does it agree with the Totals row?",
+  "op": "table_query",
+  "files": [
+   "historic-monthly.csv"
+  ],
+  "method": "Sum the month rows of the named year column, excluding the Totals row, and compare with that column's Totals row value.",
+  "answer_shape": "recomputed total + Totals row value + agrees/disagrees"
+ },
+ {
+  "question": "Did the highest monthly entry stay in the same month from 2009 to 2010? Name each peak month and its value.",
+  "op": "table_query",
+  "files": [
+   "historic-monthly.csv"
+  ],
+  "method": "For each of the two year columns, exclude the Totals row and find the month with the maximum value; compare the months.",
+  "answer_shape": "Yes/No + per year: peak month + value"
+ },
+ {
+  "question": "At X1 = 0.98 and X6 = 2, compare mean Y1 for X7 = 0 with mean Y1 for X7 = 0.10. Can we call this a matched comparison with the same glazing-distribution setting?",
+  "op": "table_query",
+  "files": [
+   "data.csv"
+  ],
+  "method": "Filter rows to the given X1 and X6 values, group by X7 and compute mean Y1 and row count for the two X7 values, listing the X8 values present in each group; the comparison is matched only if X8 is the same.",
+  "answer_shape": "mean Y1 per group (n) + difference + X8 values per group + No/Yes matched"
+ },
+ {
+  "question": "I was going to join the simulations by Total_Building_Area as if it were a building ID. How many different values does that column have, and is it a suitable unique key?",
+  "op": "table_query",
+  "files": [
+   "urban_building_stock_datasets_21022024.csv"
+  ],
+  "method": "Count distinct values of Total_Building_Area and compare with the total row count; a key must be unique per row.",
+  "answer_shape": "distinct count (values listed) + total rows + No (not a unique key)"
+ },
+ {
+  "question": "What unit does the workbook actually give Total_Building_Area? Can we use that unit as a floor-area measure without asking any further questions?",
+  "op": "text_answer",
+  "files": [
+   "ReadMe_21022024.xlsx"
+  ],
+  "method": "Read the unit and description given for Total_Building_Area in the ReadMe workbook and note whether the unit matches an area measure.",
+  "answer_shape": "unit as recorded + No (inconsistent with area; needs clarification)"
+ },
+ {
+  "question": "For the fire-engine house marked “Fire Eng. Ho.” in block L, what do the map’s fill, storey number and roof symbol tell us? Please decode the symbols rather than guessing from the building’s use.",
+  "op": "explain",
+  "files": [
+   "tombstone-2.jpg",
+   "Analysis.md"
+  ],
+  "method": "Locate the labelled building on the detail sheet and decode its fill colour, storey numeral and roof symbol using the map key (material, storeys, roofing), not the building's use.",
+  "answer_shape": "sheet/block + fill -> material + storeys + roof symbol meaning"
+ },
+ {
+  "question": "For corridor 119, would using its model-world axis-aligned bounding rectangle as floor area overstate the modelled horizontal footprint? Give both areas and the percentage overstatement relative to the footprint.",
+  "op": "area",
+  "files": [
+   "1807_EP_AR_v18.ifc"
+  ],
+  "method": "Compute the named space's true horizontal footprint area and its world-XY axis-aligned bounding rectangle area (after applying placement rotation); overstatement % = (bbox - footprint) / footprint x 100.",
+  "answer_shape": "Yes/No + footprint m2 + bounding-rectangle m2 + overstatement %"
+ },
+ {
+  "question": "Near Fourth and Fremont, the Stage and Theatre have different numbers. What storey counts are shown for each? Can I just label both parts as two-storey buildings?",
+  "op": "text_answer",
+  "files": [
+   "tombstone-2.jpg",
+   "Analysis.md"
+  ],
+  "method": "Read the storey numerals printed on each part of the named building on the detail sheet and compare them.",
+  "answer_shape": "sheet/block + storeys for each part + No (cannot label both the same)"
+ },
+ {
+  "question": "Under the two-area audit rule, which pair should we choose? Give the two names, total cost and distinct qualifying area covered.",
+  "op": "raster",
+  "files": [
+   "AuditCosts.csv",
+   "surface.tif"
+  ],
+  "method": "For each study area compute qualifying pixels (surface.tif minus terrain.tif >= 6 m inside its polygon from StudyAreas.geojson); evaluate all pairs whose summed hypothetical_audit_cost_units is within the cap and choose the pair maximising distinct (union, no double count) qualifying area.",
+  "answer_shape": "pair names + total cost + distinct qualifying pixels and m2"
+ },
+ {
+  "question": "Which bus route in this area should we call the most dangerous per passenger journey? Can you rank routes from these files, or tell me what is missing?",
+  "op": "explain",
+  "files": [
+   "dft-road-casualty-statistics-vehicle-2025.csv",
+   "dft-road-casualty-statistics-road-safety-open-dataset-data-guide-2025.xlsx"
+  ],
+  "method": "Check the data guide for a bus route field and for passenger-journey exposure; vehicle_type only identifies bus/coach. Conclude ranking is impossible and list what data is missing (optionally give bus/coach record counts as context).",
+  "answer_shape": "Cannot rank + why (no route ID, no exposure denominator) + what is missing"
+ },
+ {
+  "question": "From just the attached files, could you tell us what share of residents can walk to a public park in ten minutes?",
+  "op": "explain",
+  "files": [
+   "ProductNotes.txt",
+   "metadata.json"
+  ],
+  "method": "Check whether the files contain population, park polygons/class and walking network/time data; land-cover classes alone cannot give a walk-to-park share.",
+  "answer_shape": "Cannot answer + what the files are + what is missing"
+ },
+ {
+  "question": "Magenta’s “ASC.PMR 1013 ASA5” is marked active in the XML. Is that enough to recommend it as a working lift in our frozen snapshot?",
+  "op": "record_lookup",
+  "files": [
+   "NeTEx_20261102.xml",
+   "equipment-status.csv"
+  ],
+  "method": "Find the lift by its name in the NeTEx XML (status attribute) and the same equipment in equipment-status.csv (Etat de fonctionnement); interpret via status-metadata.json that XML status is a record status, not operating state.",
+  "answer_shape": "No + XML ID/status + CSV operating state (snapshot date) + what each field means"
+ },
+ {
+  "question": "Could you break down stops.txt into stop/platform-coded rows, stations, entrances and generic nodes? I need to explain why its row count is not a count of boarding platforms.",
+  "op": "table_query",
+  "files": [
+   "stops.txt"
+  ],
+  "method": "Group stops.txt rows by location_type (blank counted as 0) and count each; only type 0 rows are boarding points (optionally count those with platform_code/parent_station).",
+  "answer_shape": "total rows + count per location_type + explanation why total != platforms"
+ },
+ {
+  "question": "Massiac - Blesle closes later on a listed holiday Saturday. Does that mean it is open longer? Compare the two Saturday interval lengths and give the difference.",
+  "op": "table_query",
+  "files": [
+   "station-hours.csv"
+  ],
+  "method": "Filter the named station and Saturday ('Jour de la semaine'), parse the normal-day and holiday hour ranges, compute each interval length and the difference.",
+  "answer_shape": "No/Yes + normal interval and length + holiday interval and length + difference"
+ },
+ {
+  "question": "The equipment total grew between the two editions. How many equipment IDs were added, how many disappeared, and what is the net change? I do not want to mistake a net count for the number of installations.",
+  "op": "compare_keys",
+  "files": [
+   "NeTEx_20261018.xml",
+   "NeTEx_20261102.xml"
+  ],
+  "method": "Extract equipment IDs (lifts, escalators, travelators) from each edition; list IDs only in the newer file (added) and only in the older (disappeared); net = added - disappeared.",
+  "answer_shape": "counts per edition + added count (IDs) + disappeared count (IDs) + net change + caveat"
+ },
+ {
+  "question": "How many active trips on 4 November prohibit bicycles? Why should we not simply use the whole trip table’s count of bike-prohibited records?",
+  "op": "transit",
+  "files": [
+   "trips.txt",
+   "calendar.txt"
+  ],
+  "method": "Determine services active on the date using calendar.txt weekday/date range and calendar_dates.txt exceptions, filter trips.txt to those services and count bikes_allowed = 2; contrast with the unfiltered whole-table count.",
+  "answer_shape": "active bike-prohibited trip count (trip/route) + total active trips + whole-table count and why it is wrong"
+ },
+ {
+  "question": "Magenta’s station WheelchairAccess flag is true. Combining that with the supplied equipment states and geometry, can we promise an end-to-end working step-free route to each quay? Give a source-specific reason for your conclusion.",
+  "op": "explain",
+  "files": [
+   "NeTEx_20261102.xml",
+   "equipment-status.csv"
+  ],
+  "method": "Read the station's accessibility flags in the XML, then check the operating state of lifts/escalators serving each quay in the CSV and whether quays have geometry; a route cannot be promised if a needed lift is KO.",
+  "answer_shape": "No + station flags + KO equipment named + source-specific reason"
+ },
+ {
+  "question": "For a hypothetical next period, start with the published 2025 cumulative net figure, then add 12,000 plantings and 350 removals. What would the new net total be, and would it pass a 125,000 benchmark?",
+  "op": "value",
+  "files": [
+   "records.csv",
+   "DatasetMetadata.json"
+  ],
+  "method": "Read solde_net_cumule for the latest year, add the hypothetical plantings and subtract removals, then compare with the benchmark.",
+  "answer_shape": "new net total + Yes/No passes + margin + hypothetical label"
+ },
+ {
+  "question": "My first script counted the tree cells and multiplied by 100 m². It gives roughly 449 km². Can you check the area before that goes into the briefing?",
+  "op": "raster",
+  "files": [
+   "cape_town_2021.tif",
+   "municipalities.geojson"
+  ],
+  "method": "Count Tree cover (class 10) cells inside the Cape Town boundary (cell-centre selection, nodata excluded) and compute area with geodesic WGS84 cell areas (cells are in degrees, so not a nominal 100 m2); compare with the nominal figure and give the overstatement.",
+  "answer_shape": "No + cell count + nominal area vs geodesic area km2 + overstatement km2 and %"
+ },
+ {
+  "question": "Across the six published entries from 2020 to 2025, what are the total plantings, total removals and net addition? I want the briefing to distinguish gross planting from the net figure.",
+  "op": "table_query",
+  "files": [
+   "records.csv"
+  ],
+  "method": "Over the published annual entries for the period, sum plantes_annuel and sum abattus_annuel (take absolute value, stored negative), net = plantings - removals, and check it equals the latest solde_net_cumule.",
+  "answer_shape": "total plantings + total removals + net addition (matches latest cumulative)"
+ },
+ {
+  "question": "How much larger is the mapped Tree cover area in the 2021 edition than in the 2020 edition—both in km² and as a percentage of the older figure?",
+  "op": "raster",
+  "files": [
+   "cape_town_2020.tif",
+   "cape_town_2021.tif"
+  ],
+  "method": "For each edition compute Tree cover (class 10) area inside the Cape Town boundary (municipalities.geojson) using geodesic cell areas; difference = newer - older, % = difference / older x 100; caveat that editions use different algorithms.",
+  "answer_shape": "area per edition (cells, km2) + difference km2 + % of older + algorithm caveat"
+ },
+ {
+  "question": "Does the supplied DCC tabular export itself contain X/Y or latitude/longitude columns? How many records have Street recorded as null, before we try to map them?",
+  "op": "count_blank",
+  "files": [
+   "DCC.json"
+  ],
+  "method": "List the export's field names to check for X/Y or lat/lon columns, and count records where Street is null (also trim-aware blank) out of all records.",
+  "answer_shape": "No/Yes coordinate columns (field list) + null Street count + total records"
+ },
+ {
+  "question": "There are records labelled 21. How many are there, and can I confidently rename that class “trees” from this packet?",
+  "op": "table_query",
+  "files": [
+   "survey.laz",
+   "Analysis.md"
+  ],
+  "method": "Group point records by classification code and count; check the LAS header for a class-lookup VLR and whether the code is a standard ASPRS class; Analysis.md forbids inventing labels for unexplained codes.",
+  "answer_shape": "count for the code (of total, other codes) + No (cannot rename) with reasons"
+ },
+ {
+  "question": "For park trees 00008100_0029b9f2 and 00008100_0029b9f6, assume circular crowns centred on their recorded points with the recorded diameters. What area is covered by both circles? Report square metres; this is a planning approximation.",
+  "op": "spatial",
+  "files": [
+   "anlagenbaeume.geojson"
+  ],
+  "method": "Get the two trees' points (projected CRS, metres) and crown diameter field (kronedurch), compute centre distance and the circle-circle intersection (lens) area with r = diameter/2; label as hypothetical circular crowns.",
+  "answer_shape": "overlap area m2 + radii and centre distance + approximation caveat"
+ },
+ {
+  "question": "Can we filter these map cells to keep only classifications with at least 90% confidence? I saw InputQuality mentioned in the source notes.",
+  "op": "explain",
+  "files": [
+   "ProductNotes.txt",
+   "metadata.json"
+  ],
+  "method": "Check what the Map rasters contain (single categorical class code band) and what InputQuality reports (observation counts, invalid %), and whether InputQuality files are supplied; no per-cell confidence is available.",
+  "answer_shape": "No + what the raster bands contain + what InputQuality means + not supplied"
+ },
+ {
+  "question": "Someone has added every cumulative column entry to get the programme’s net gain since 2020. What single published figure should we use instead, and why?",
+  "op": "value",
+  "files": [
+   "records.csv",
+   "DatasetMetadata.json"
+  ],
+  "method": "Read solde_net_cumule for the latest year; explain that the column is already a running cumulative total, so summing its entries double-counts earlier years.",
+  "answer_shape": "published figure to use (year) + why summing cumulative entries is wrong (optionally the wrong sum)"
+ },
+ {
+  "question": "The coverage table says Outremont data are unavailable. Should I tell my colleague that there is no Outremont file in this package?",
+  "op": "explain",
+  "files": [
+   "coverage.csv",
+   "outremont.csv"
+  ],
+  "method": "Check the catalogue.json resource list and count rows in outremont.csv to show the file exists; interpret the coverage table's 'unavailable' as referring to the consolidated dataset at its date, not to the absence of a file.",
+  "answer_shape": "No + Outremont file record count and catalogue resource + what the coverage note means"
+ },
+ {
+  "question": "Use the lighting density in the first data record for a hypothetical 160.5 m² room operated for 2670 hours per year at full lighting power. What installed lighting power and annual energy does that give?",
+  "op": "record_lookup",
+  "files": [
+   "urban_building_stock_datasets_21022024.csv"
+  ],
+  "method": "Read Lighting_Density (W/m2) of the first data record; power = density x room area (W), annual energy = power x hours (Wh -> kWh); label as hypothetical.",
+  "answer_shape": "density used + installed power W/kW + annual kWh + hypothetical label"
+ },
+ {
+  "question": "We can survey exactly two supplied buildings with known polygon footprints, with their combined area capped at 6,000 m². Which pair gives the greatest combined area, and what is that area?",
+  "op": "area",
+  "files": [
+   "Buildings.geojson"
+  ],
+  "method": "Compute each polygon footprint area in the projected CRS (EPSG:2154), excluding point-only records; evaluate all pairs with combined area <= cap and pick the maximum.",
+  "answer_shape": "two building IDs with areas + combined area + count of polygons considered / points excluded"
+ },
+ {
+  "question": "Using the complete closed solids, including roof, wall and ground faces, how much smaller is the focus building’s LoD 2.2 mesh volume than its LoD 1.2 mesh volume? Give the percentage reduction relative to LoD 1.2.",
+  "op": "record_lookup",
+  "files": [
+   "3dbag_page_a.json",
+   "SourceGuide.md"
+  ],
+  "method": "For the focus building named in the source guide, compute (or read b3_volume_lod12 / b3_volume_lod22) closed-solid volumes at LoD 1.2 and LoD 2.2; reduction = LoD1.2 - LoD2.2, % relative to LoD 1.2.",
+  "answer_shape": "building ID + LoD1.2 volume + LoD2.2 volume + difference m3 + % reduction"
+ },
+ {
+  "question": "For a tariff exercise, use MT_162 rows labelled 16 January 2012. Charge €0.12/kWh for labels before 07:00 and €0.25/kWh for all remaining labels that date. Ignore tax and fixed charges. What is the total, without moving any timestamp?",
+  "op": "table_query",
+  "files": [
+   "EightClients_CompletePeriod.csv",
+   "PublisherMetadata.json"
+  ],
+  "method": "Filter the named client column to timestamp labels on the date (semicolon-separated, comma decimals); convert 15-minute kW to kWh (kW/4), sum before 07:00 and the rest separately, multiply by each tariff and add; do not shift timestamps.",
+  "answer_shape": "row count + kWh and charge per tariff band + total EUR"
+ },
+ {
+  "question": "CSV lines 3 and 4 are both Detached with the same area-field value. What is the percentage EUI change from line 4 to line 3? Can I attribute that entire change just to their different HVAC parameter?",
+  "op": "record_lookup",
+  "files": [
+   "urban_building_stock_datasets_21022024.csv"
+  ],
+  "method": "Read the two specified CSV lines (line numbers counting the header as line 1); compute % change in EUI from the second-named line to the first, and list which other input parameters differ besides HVAC.",
+  "answer_shape": "both EUIs (and ratings) + % change + No (many inputs differ, listed)"
+ },
+ {
+  "question": "For 16 January 2012, what is the highest simultaneous reported total for MT_125, MT_162 and MT_200? Compare it with adding the three separate maxima.",
+  "op": "table_query",
+  "files": [
+   "EightClients_CompletePeriod.csv"
+  ],
+  "method": "Filter rows labelled on the date; compute the row-wise sum of the three client columns and its maximum (with time), then the sum of each column's own maximum; compare.",
+  "answer_shape": "coincident peak (time, components) + sum of separate maxima (times) + difference kW and %"
+ },
+ {
+  "question": "In a hypothetical bill, February 2024 use is shown as 125 MWh and the customer is marked P011. Before we apply that profile’s correction ratio, does that combination make sense under the definitions? What would you check first?",
+  "op": "text_answer",
+  "files": [
+   "correction_climatique_definitions_v2_pdf.pdf",
+   "records.csv"
+  ],
+  "method": "Read the definition of profile P011 (annual consumption band and use) in the definitions PDF; compare the monthly figure with that annual ceiling and say to check profile assignment/units first, noting the ratio is a national aggregate.",
+  "answer_shape": "No + profile definition + magnitude comparison + what to check first"
+ },
+ {
+  "question": "Does counting IfcSpace entities tell us the number of apartments? Give the space count and the number of distinct nonblank flat-label values, excluding the native \"-\" placeholder, with the appropriate limitation.",
+  "op": "table_query",
+  "files": [
+   "1807_EP_AR_v18.ifc"
+  ],
+  "method": "Count IfcSpace entities; count distinct non-blank values of the flat-number property AR_Ruum.722_Eluruumi_number excluding the '-' placeholder; note spaces are rooms, not dwellings.",
+  "answer_shape": "No + IfcSpace count + distinct flat labels (and '-' count) + limitation"
+ },
+ {
+  "question": "Which buildings still need an outline before we can measure their footprints? I mean the records whose shape is only a point.",
+  "op": "table_query",
+  "files": [
+   "Records.json"
+  ],
+  "method": "Filter records whose shape geometry type is Point (not polygon) and list their IDs (with status/is_active).",
+  "answer_shape": "count of point-only records + their IDs"
+ },
+ {
+  "question": "For the report’s 2024 gas sample in England and Wales, what would you call the typical use: what are the mean and median, and how much higher is the mean as a percentage of the median?",
+  "op": "value",
+  "files": [
+   "Consumption_headline_EW_2024.xlsx"
+  ],
+  "method": "Read the 2024 gas mean and median for all dwellings in the England and Wales table; (mean - median) / median x 100; describe the typical value with the median.",
+  "answer_shape": "sample size + mean + median + % mean above median + median is typical"
+ },
+ {
+  "question": "For the supplied space inventory, how many spaces are marked heated, and how many are explicitly unheated? Is this evidence of metered heating use?",
+  "op": "table_query",
+  "files": [
+   "1807_EP_AR_v18.ifc"
+  ],
+  "method": "Count IfcSpace entities by the value of the heated-area property AR_Ruum.721_Ruumitemperatuuriga_pind (TRUE vs FALSE); explain this is a design attribute, not metered use.",
+  "answer_shape": "heated count + explicitly unheated count + No (not metered evidence)"
+ },
+ {
+  "question": "Before I load this into a dashboard, how many client series are in our teaching CSV, and how many does the original dataset describe?",
+  "op": "table_query",
+  "files": [
+   "EightClients_CompletePeriod.csv",
+   "PublisherMetadata.json"
+  ],
+  "method": "Count the client columns (MT_*) in the CSV header (and rows), and read the number of clients the original dataset describes from the publisher metadata.",
+  "answer_shape": "client series in CSV (names) + clients in original dataset"
+ },
+ {
+  "question": "Could we use is_active as if it meant “currently occupied”? What do that field and status actually tell us in these records?",
+  "op": "text_answer",
+  "files": [
+   "SourceGuide.txt",
+   "Records.json"
+  ],
+  "method": "Read the guide's definitions of is_active (identifier status) and status (physical state), tally their values across records, and note there is no occupancy data.",
+  "answer_shape": "No + what each field means + value counts + no occupancy data"
+ },
+ {
+  "question": "How much more gas did the detached-house group use on average than purpose-built flats in the 2024 England-and-Wales sample? Give me the difference in kWh and detached divided by flat as a ratio.",
+  "op": "value",
+  "files": [
+   "Consumption_headline_EW_2024.xlsx"
+  ],
+  "method": "Read the 2024 gas mean consumption for the Detached and Purpose-built flat rows in the England and Wales table; difference = detached - flat, ratio = detached / flat.",
+  "answer_shape": "both means (with n) + difference kWh + ratio"
+ },
+ {
+  "question": "Can I label the final record simply “calendar year 2019”, with a known January-to-December interval?",
+  "op": "explain",
+  "files": [
+   "electricity-use-ethekwini.xlsx",
+   "data-dictionary-for-electricity-usage-file.pdf"
+  ],
+  "method": "Read the final Year label and check whether the dictionary or catalogue defines its start/end months; a split-year label does not establish a January-December interval.",
+  "answer_shape": "No + final label (split/financial year) + interval not defined in docs"
+ },
+ {
+  "question": "MT_370 is all zero in 2011 and 2012. Can we report that the customer was operating with no electricity demand for those two years? When is its first positive value?",
+  "op": "table_query",
+  "files": [
+   "EightClients_CompletePeriod.csv",
+   "PublisherMetadata.json"
+  ],
+  "method": "Find the first timestamp where the client's value > 0; read the publisher note that clients created later are recorded as zero before they existed.",
+  "answer_shape": "No + reason from metadata + first positive timestamp and value"
+ },
+ {
+  "question": "I averaged the two weather-group mean EUIs to describe the whole CSV. What is the actual all-row mean, and what does equal weighting of those two group means give instead? Please keep this about simulation rows.",
+  "op": "table_query",
+  "files": [
+   "urban_building_stock_datasets_21022024.csv"
+  ],
+  "method": "Compute mean EUI over all rows, and mean EUI and row count grouped by Weather_File; the unweighted average of the group means differs from the all-row mean when group sizes differ.",
+  "answer_shape": "all-row mean (n) + group means (n) + equal-weight average + difference"
+ }
+]

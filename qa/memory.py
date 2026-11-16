@@ -155,3 +155,28 @@ class Memory:
 if __name__ == "__main__":
     import sys
     print(build([Path(p) for p in sys.argv[1:]]), "patterns stored in", DB)
+
+
+# ---- OUT-OF-RULES (branch out-of-rules only): teacher bank built from judged TEST questions. Never in a submission.
+TEACH_DB = Path(__file__).resolve().parent.parent / "dev" / "teacher.json"
+
+
+class TeacherBank:
+    """Teacher-labelled solved questions: {question, op, files, method, answer_shape}. BM25 over masked question text."""
+
+    def __init__(self, path: Path = TEACH_DB):
+        self.items = json.loads(Path(path).read_text(encoding="utf-8")) if Path(path).exists() else []
+        self.docs = [_toks(mask(x["question"])) for x in self.items]
+        self.df = Counter(t for d in self.docs for t in set(d))
+        self.avg = sum(map(len, self.docs)) / max(1, len(self.docs))
+
+    def similar(self, question: str, k: int = 3, min_score: float = 4.0) -> list[tuple[float, dict]]:
+        q, N = _toks(mask(question)), len(self.docs)
+        out = []
+        for d, it in zip(self.docs, self.items):
+            tf = Counter(d)
+            s = sum(math.log(1 + (N - self.df[t] + 0.5) / (self.df[t] + 0.5)) * tf[t] * 2.5 / (tf[t] + 1.5 * (0.25 + 0.75 * len(d) / self.avg))
+                    for t in q if t in tf)
+            if s >= min_score and it["question"].strip() != question.strip():  # never the question itself
+                out.append((s, it))
+        return sorted(out, key=lambda x: -x[0])[:k]
